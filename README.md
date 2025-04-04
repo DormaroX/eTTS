@@ -1,4 +1,4 @@
-# Electron-TTS
+# eTTS
 
 Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTalker.
 
@@ -23,8 +23,8 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 
 1. Repository klonen:
 ```bash
-git clone [repository-url]
-cd electron-tts
+git clone https://github.com/dormarox/eTTS.git
+cd eTTS
 ```
 
 2. Node.js-Abhängigkeiten installieren:
