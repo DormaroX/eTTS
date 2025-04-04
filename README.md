@@ -15,9 +15,8 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 ## Voraussetzungen
 
 - Node.js 20.x oder höher
-- Docker und docker-compose
-- NVIDIA GPU mit CUDA-Unterstützung
 - Python 3.10 oder höher
+- FFmpeg für die Videobearbeitung
 
 ## Installation
 
@@ -40,7 +39,7 @@ cd SadTalker
 bash scripts/download_models.sh
 python3 -m venv venv
 source venv/bin/activate
-pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu118
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 pip install -r requirements.txt
 ```
 

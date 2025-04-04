@@ -11,13 +11,13 @@ const { writeToTTS } = require('./tts-output');
 // Pfade für SadTalker
 const SADTALKER_PATH = '/home/aov/SadTalker';
 const IMAGES_PATH = path.join(__dirname, 'assets', 'images');
-const VIDEO_PATH = path.join(__dirname, 'assets', 'videos');
+const VIDEO_PATH = path.join(app.getPath('videos'), 'eTTS-Export');
 
 // Avatar zu Stimmen-Mapping
 const AVATAR_VOICE_MAP = {
     'Maxx': { voice: 'ash', image: 'maxx.png' },
     'Terra': { voice: 'sage', image: 'terra.png' },
-    'Nova': { voice: 'shimmer', image: 'nova.png' },
+    'Nova': { voice: 'nova', image: 'nova.png' },
     'Nyxari': { voice: 'coral', image: 'nyxari.png' }
 };
 
@@ -180,17 +180,17 @@ async function generateVideo(audioPath, avatarName, quality, upscale) {
         fs.mkdirSync(tempOutputDir);
     }
 
-    let command = `cd ${SADTALKER_PATH} && python3 inference.py \
+    let command = `cd ${SADTALKER_PATH} && CUDA_VISIBLE_DEVICES=-1 python3 inference.py \
         --driven_audio "${audioPath}" \
         --source_image "${imagePath}" \
-        --enhancer gfpgan \
         --result_dir "${tempOutputDir}" \
-        --expression_scale 1.3 \
+        --expression_scale 1.0 \
         --size 256 \
         --still \
-        --preprocess full \
-        --net_recon resnet50 \
-        --checkpoint_dir "${SADTALKER_PATH}/checkpoints"`;
+        --preprocess crop \
+        --net_recon resnet18 \
+        --checkpoint_dir "${SADTALKER_PATH}/checkpoints" \
+        --cpu`;
 
     // Warte auf die Fertigstellung und verschiebe die Datei
     command += ` && sleep 2 && mv "${tempOutputDir}"/*.mp4 "${path.join(VIDEO_PATH, videoName)}.mp4"`;
@@ -258,19 +258,16 @@ async function generateMP3(event, text, outputPath, voice = 'nova') {
     const dirCheck = checkOutputDirectory(outputDir);
     
     if (!dirCheck.available) {
-        // Versuche, im Home-Verzeichnis zu speichern
-        const homeDir = path.join(app.getPath('home'), 'AudioExport');
-        const homeDirCheck = checkOutputDirectory(homeDir);
+        // Versuche, im Musik-Verzeichnis zu speichern
+        const homeDir = path.join(app.getPath('music'), 'eTTS-Export');
         
-        if (!homeDirCheck.available) {
-            throw new Error(`Hauptspeicherort nicht verfügbar: ${dirCheck.error}\nAlternativer Speicherort auch nicht verfügbar: ${homeDirCheck.error}`);
-        }
-        
-        // Verwende Home-Verzeichnis als Alternative
-        outputPath = path.join(homeDir, path.basename(outputPath));
+        // Erstelle das Verzeichnis, falls es nicht existiert
         if (!fs.existsSync(homeDir)) {
             await fsPromises.mkdir(homeDir, { recursive: true });
         }
+        
+        // Verwende Musik-Verzeichnis als Alternative
+        outputPath = path.join(homeDir, path.basename(outputPath));
         console.log(`Verwende alternativen Speicherort: ${homeDir}`);
     }
 
@@ -282,7 +279,7 @@ async function generateMP3(event, text, outputPath, voice = 'nova') {
     let currentBlock = 0;
 
     // Erstelle Basis-Dateinamen ohne .mp3 Erweiterung
-    const outputBaseName = path.join(outputDir, path.basename(outputPath, '.mp3'));
+    const outputBaseName = path.join(path.dirname(outputPath), path.basename(outputPath, '.mp3'));
 
     // Verarbeite jeden Block
     for (const block of blocks) {
