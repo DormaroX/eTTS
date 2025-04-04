@@ -1,0 +1,5 @@
+#!/bin/bash
+export OPENAI_API_KEY="DEIN_OPENAI_API_KEY"
+npx electron /home/andre/electron-tts
+bash
+npx electron /home/andre/electron-tts

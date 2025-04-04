@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electron Bastelbox TTS by AOV</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+        }
+        body {
+            background-image: url('./assets/images/background.png');
+            background-size: 100% 100%;
+            background-position: center center;
+            background-repeat: no-repeat;
+            color: #ffffff;
+            font-family: Arial, sans-serif;
+            text-align: center;
+            position: relative;
+            min-height: 100vh;
+            min-width: 100vw;
+        }
+        .content-wrapper {
+            position: absolute;
+            top: 68%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 100%;
+        }
+        .controls {
+            margin-bottom: 20px;
+        }
+        textarea {
+            width: 80%;
+            height: 225px;
+            font-size: 16px;
+            background-color: rgba(30, 30, 30, 0.6);
+            color: #ffffff;
+            border: 1px solid #333;
+            padding: 10px;
+            margin: 0 auto;
+            display: block;
+        }
+        button {
+            margin: 10px;
+            padding: 10px;
+            font-size: 16px;
+            background-color: #333;
+            color: #ffffff;
+            border: none;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        .button-row {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .styled-select {
+            background-color: rgba(30, 30, 30, 0.6);
+            color: #ffffff;
+            border: 1px solid #333;
+            padding: 8px 15px;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            min-width: 150px;
+        }
+
+        .styled-select:hover {
+            background-color: rgba(50, 50, 50, 0.6);
+        }
+
+        button:hover {
+            background-color: #555;
+        }
+        #stop-btn {
+            background-color: #8b0000;
+        }
+        #stop-btn:hover {
+            background-color: #a00000;
+        }
+
+        #progress-container {
+            margin: 20px auto;
+            width: 80%;
+            background-color: #333;
+            border-radius: 5px;
+            height: 25px;
+            display: block;
+            position: relative;
+        }
+        #progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #00ff00;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        #progress-bar.active {
+            background-image: linear-gradient(
+                45deg,
+                rgba(255, 255, 255, 0.15) 25%,
+                transparent 25%,
+                transparent 50%,
+                rgba(255, 255, 255, 0.15) 50%,
+                rgba(255, 255, 255, 0.15) 75%,
+                transparent 75%,
+                transparent
+            );
+            background-size: 1rem 1rem;
+            animation: progress-bar-stripes 1s linear infinite;
+        }
+        #progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-size: 14px;
+        }
+        #block-progress-container {
+            margin: 10px auto;
+            width: 80%;
+            background-color: #333;
+            border-radius: 5px;
+            height: 25px;
+            display: block;
+            position: relative;
+        }
+        #block-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #00ff00;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        #block-progress-bar.active {
+            background: repeating-linear-gradient(
+                45deg,
+                #00ff00,
+                #00ff00 10px,
+                #00dd00 10px,
+                #00dd00 20px
+            );
+            animation: progress-stripes 1s linear infinite;
+        }
+        @keyframes progress-stripes {
+            from {
+                background-position: 0 0;
+            }
+            to {
+                background-position: 40px 0;
+            }
+        }
+        #block-progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-size: 12px;
+        }
+        #total-progress-container {
+            margin: 10px auto;
+            width: 80%;
+            background-color: #333;
+            border-radius: 5px;
+            height: 25px;
+            display: block;
+            position: relative;
+        }
+        #total-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #00ff00;
+            border-radius: 5px;
+            transition: width 0.3s ease;
+        }
+        #total-progress-text {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #ffffff;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="content-wrapper">
+        <div class="controls">
+            <textarea id="text-input" placeholder="Gib deinen Text hier ein..."></textarea>
+            <br>
+            <div class="button-row">
+                <button id="listen-btn">Anhören</button>
+                <button id="save-btn">Als MP3 speichern</button>
+                <button id="txt2mp3-btn">txt2mp3</button>
+                <button id="upload-btn">txt2mp3 blocks</button>
+                <button id="stop-btn" style="background-color: #ff4444;">Stop!</button>
+            </div>
+            <div class="button-row">
+                <select id="avatar-select" class="styled-select">
+                    <option value="Maxx|Ash">Maxx (Ash)</option>
+                    <option value="Terra|Sage">Terra (Sage)</option>
+                    <option value="Nova|Shimmer">Nova (Shimmer)</option>
+                    <option value="Nyxari|Coral">Nyxari (Coral)</option>
+                </select>
+                <select id="quality-select" class="styled-select">
+                    <option value="128">Schnell (128x128)</option>
+                    <option value="256">Standard (256x256)</option>
+                    <option value="512">Hoch (512x512)</option>
+                </select>
+                <select id="upscale-select" class="styled-select">
+                    <option value="none">Kein Upscaling</option>
+                    <option value="2k">2K Upscaling</option>
+                    <option value="4k">4K Upscaling</option>
+                </select>
+                <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
+            </div>
+            
+            <div id="progress-container">
+                <div id="progress-bar"></div>
+                <div id="progress-text"></div>
+            </div>
+            <div id="block-progress-container">
+                <div id="block-progress-bar"></div>
+                <div id="block-progress-text"></div>
+            </div>
+            <div id="total-progress-container">
+                <div id="total-progress-bar"></div>
+                <div id="total-progress-text"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('listen-btn').addEventListener('click', () => {
+            const text = document.getElementById('text-input').value;
+            const avatar = document.getElementById('avatar-select').value;
+            window.electronAPI.sendText({ text, avatar });
+        });
+
+        document.getElementById('txt2mp4-btn').addEventListener('click', () => {
+            console.log('TXT zu MP4 Button geklickt');
+            const text = document.getElementById('text-input').value;
+            const avatar = document.getElementById('avatar-select').value;
+            const quality = document.getElementById('quality-select').value;
+            const upscale = document.getElementById('upscale-select').value;
+            
+            console.log('Werte:', { text, avatar, quality, upscale });
+            
+            window.electronAPI.sendTxt2mp4({
+                text,
+                avatar,
+                quality,
+                upscale
+            });
+        });
+
+        document.getElementById('save-btn').addEventListener('click', () => {
+            const text = document.getElementById('text-input').value;
+            window.electronAPI.saveText(text);
+        });
+
+        document.getElementById('txt2mp3-btn').addEventListener('click', () => {
+            window.electronAPI.txt2mp3();
+        });
+
+        document.getElementById('upload-btn').addEventListener('click', () => {
+            window.electronAPI.uploadTxtFile();
+        });
+
+        document.getElementById('stop-btn').addEventListener('click', () => {
+            window.electronAPI.stopProcess();
+        });
+
+        // Fortschrittsbalken aktualisieren
+        window.electronAPI.onProgressUpdate((progress, totalBlocks, currentBlock, blockProgress) => {
+            requestAnimationFrame(() => {
+                // Wenn alle Werte 0 sind, setze die Balken zurück
+                if (progress === 0 && totalBlocks === 0 && currentBlock === 0 && blockProgress === 0) {
+                    document.getElementById('progress-bar').style.width = "0%";
+                    document.getElementById('block-progress-bar').style.width = "0%";
+                    document.getElementById('total-progress-bar').style.width = "0%";
+                    document.getElementById('block-progress-bar').classList.remove('active');
+                    document.getElementById('progress-text').textContent = 'Bereit';
+                    document.getElementById('block-progress-text').textContent = 'Kein Block in Bearbeitung';
+                    document.getElementById('total-progress-text').textContent = 'Gesamtfortschritt: 0%';
+                    return;
+                }
+
+                // Berechne den tatsächlichen Gesamtfortschritt
+                const blockWeight = 100 / totalBlocks; // Gewichtung pro Block
+                const completedBlocksProgress = (currentBlock - 1) * blockWeight; // Fortschritt der abgeschlossenen Blöcke
+                const currentBlockContribution = (blockProgress / 100) * blockWeight; // Beitrag des aktuellen Blocks
+                const totalProgress = completedBlocksProgress + currentBlockContribution;
+
+                // Zeige die Container
+                document.getElementById('progress-container').style.display = "block";
+                document.getElementById('block-progress-container').style.display = "block";
+                document.getElementById('total-progress-container').style.display = "block";
+
+                // Aktualisiere die Fortschrittsbalken
+                document.getElementById('progress-bar').style.width = `${totalProgress}%`;
+                document.getElementById('block-progress-bar').style.width = `${blockProgress}%`;
+                document.getElementById('total-progress-bar').style.width = `${totalProgress}%`;
+
+                // Verwalte die Schraffierung des aktiven Blocks und des Fortschrittsbalkens
+                const blockProgressBar = document.getElementById('block-progress-bar');
+                const progressBar = document.getElementById('progress-bar');
+                
+                // Aktiviere Schraffierung für den aktuellen Block-Fortschritt
+                if (blockProgress > 0 && blockProgress < 100) {
+                    blockProgressBar.classList.add('active');
+                } else {
+                    blockProgressBar.classList.remove('active');
+                }
+                
+                // Aktiviere Schraffierung für den Block-Übersichtsbalken
+                if (currentBlock > 0 && currentBlock <= totalBlocks) {
+                    progressBar.classList.add('active');
+                } else {
+                    progressBar.classList.remove('active');
+                }
+
+                // Aktualisiere die Texte
+                document.getElementById('progress-text').textContent = `Block ${currentBlock} von ${totalBlocks}`;
+                document.getElementById('block-progress-text').textContent = `Block-Fortschritt: ${Math.round(blockProgress)}%`;
+                document.getElementById('total-progress-text').textContent = `Gesamtfortschritt: ${Math.round(totalProgress)}%`;
+
+                if (progress === 100) {
+                    setTimeout(() => {
+                        document.getElementById('progress-container').style.display = "none";
+                        document.getElementById('block-progress-container').style.display = "none";
+                        document.getElementById('total-progress-container').style.display = "none";
+                    }, 1000);
+                }
+            });
+        });
+
+        // History aktualisieren
+        function updateHistory(history) {
+            const container = document.getElementById('history-container');
+            container.innerHTML = "";
+
+            history.forEach(entry => {
+                const div = document.createElement('div');
+                div.classList.add('history-item');
+                div.textContent = `[${new Date(entry.timestamp).toLocaleString()}] ${entry.text}`;
+                container.appendChild(div);
+            });
+        }
+
+        // Error Handler
+        window.electronAPI.onError((message) => {
+            alert(message);
+        });
+    </script>
+</body>
+</html>

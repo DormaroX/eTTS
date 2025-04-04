@@ -1,0 +1,17 @@
+{
+  "name": "electron-tts",
+  "version": "1.0.0",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "@electron/remote": "^2.1.2",
+    "@google-cloud/text-to-speech": "^5.8.1",
+    "dotenv": "^16.4.7",
+    "electron": "^35.0.2",
+    "fs": "^0.0.1-security",
+    "openai": "^4.86.2"
+  },
+  "description": ""
+}
