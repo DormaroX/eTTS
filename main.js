@@ -3,7 +3,17 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { exec } = require('child_process');
-require('dotenv').config();
+// Konfiguriere dotenv
+const dotenv = require('dotenv');
+const envPath = path.join(__dirname, '.env');
+
+// Erstelle .env Datei, falls sie nicht existiert
+if (!fs.existsSync(envPath)) {
+    fs.writeFileSync(envPath, '\n# Konfiguration\nOPENAI_API_KEY=\nPORT=3000\nHOST=localhost\n');
+}
+
+// Lade Umgebungsvariablen
+dotenv.config({ path: envPath });
 const { OpenAI } = require('openai');
 require('@electron/remote/main').initialize();
 const { writeToTTS } = require('./tts-output');
@@ -51,21 +61,32 @@ function createWindow() {
     let mainWindow = new BrowserWindow({
         width: 1324,
         height: 747,
+        minWidth: 1324,
+        minHeight: 747,
         center: true,
+        fullscreen: true,
         icon: path.join(iconPath, process.platform === 'linux' ? 'icon-64.png' : 'icon.png'),
         webPreferences: {
             nodeIntegration: true,
             contextIsolation: true,
             enableRemoteModule: true,
-            webSecurity: false,
-            preload: path.join(__dirname, 'preload.js')
+            webSecurity: true,
+            allowRunningInsecureContent: false,
+            preload: path.join(__dirname, 'preload.js'),
+            devTools: false
         },
-        title: 'Electron TTSBastelbox by AOV',
+        title: 'eTTS by dormarox',
     });
 
     require('@electron/remote/main').enable(mainWindow.webContents);
 
     mainWindow.loadFile('index.html')
+        .then(() => {
+            // DevTools nur im Entwicklungsmodus öffnen
+            if (process.env.NODE_ENV === 'development') {
+                mainWindow.webContents.openDevTools();
+            }
+        })
         .catch(error => {
             console.error('Fehler beim Laden der HTML-Datei:', error);
             dialog.showErrorBox('Fehler', 'Konnte die HTML-Datei nicht laden. Bitte versuche es erneut.');

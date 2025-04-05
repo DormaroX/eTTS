@@ -1,17 +1,17 @@
 {
-  "name": "electron-tts",
-  "version": "1.0.0",
+  "name": "etts-by-dormarox",
+  "version": "1.2.0",
   "main": "main.js",
   "scripts": {
     "start": "electron . --no-sandbox"
   },
   "dependencies": {
     "@electron/remote": "^2.1.2",
-    "@google-cloud/text-to-speech": "^5.8.1",
     "dotenv": "^16.4.7",
     "electron": "^35.0.2",
-    "fs": "^0.0.1-security",
-    "openai": "^4.86.2"
+    "howler": "^2.2.4",
+    "mp3-duration": "^1.1.0",
+    "openai": "^4.91.1"
   },
-  "description": ""
+  "description": "Eine moderne Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung"
 }
