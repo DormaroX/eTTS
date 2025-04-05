@@ -1,4 +1,4 @@
-# eTTS
+# eTTS v1.1
 
 Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTalker.
 
@@ -11,6 +11,11 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 - Upscaling-Optionen (2K, 4K)
 - MP3-Export
 - Modernes, dunkles UI-Design
+- Playlist-Management mit Drag & Drop
+- Automatische Wiedergabe-Queue
+- Fortschrittsanzeige für die Audiowiedergabe
+- Lautstärkeregelung
+- Kompakte Benutzeroberfläche
 
 ## Voraussetzungen
 
