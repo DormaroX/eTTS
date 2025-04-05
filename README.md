@@ -31,7 +31,7 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 
 ## Known Issues
 
-- Die Wiedergabezeit-Anzeige (aktuelle Position/verbleibende Zeit) funktioniert derzeit nicht zuverlässig
+- Die Wiedergabezeit-Anzeige (verstrichene Zeit/verbleibende Zeit) funktioniert derzeit nicht zuverlässig
 - Die Fortschrittsleiste zeigt möglicherweise nicht die exakte Position im Audio an
 
 ## Installation
