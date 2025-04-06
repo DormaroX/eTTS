@@ -119,6 +119,7 @@ app.on('window-all-closed', () => {
 
 // "Anhören" (schneller, mit `tts-1`)
 ipcMain.on('tts-playback', async (event, data) => {
+    console.log('main.js: Received TTS request:', data);
     try {
         if (!data || !data.text || data.text.trim() === '') {
             event.sender.send('error', 'Bitte gebe einen Text ein.');
@@ -282,7 +283,14 @@ ipcMain.on('audio-progress', (event, currentTime, duration) => {
 });
 
 // Gemeinsame Funktion für die MP3-Generierung
-async function generateMP3(event, text, outputPath, voice = 'nova') {
+async function generateMP3(event, text, outputPath, avatar) {
+    // Hole die Stimme aus dem Avatar-Mapping
+    const avatarName = avatar.split('|')[0].trim();
+    const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+    if (!avatarInfo) {
+        throw new Error(`Ungültiger Avatar: ${avatarName}`);
+    }
+    const voice = avatarInfo.voice;
     // Setze stopRequested zurück
     stopRequested = false;
     if (!text || text.trim() === '') {
@@ -379,12 +387,12 @@ async function generateMP3(event, text, outputPath, voice = 'nova') {
 
 
 // "Als MP3 speichern" (höhere Qualität mit `tts-1-hd`)
-ipcMain.on('tts-save', async (event, text, filePath) => {
+ipcMain.on('tts-save', async (event, text, filePath, avatar) => {
     try {
         if (stopRequested) {
             return;
         }
-        await generateMP3(event, text, filePath);
+        await generateMP3(event, text, filePath, avatar);
         if (!stopRequested) {
             event.sender.send('tts-save-result', filePath);
         }
@@ -397,11 +405,11 @@ ipcMain.on('tts-save', async (event, text, filePath) => {
 });
 
 // "TXT-Datei hochladen und umwandeln"
-ipcMain.on('upload-txt-file', async (event, text, mp3Path) => {
+ipcMain.on('upload-txt-file', async (event, text, mp3Path, avatar) => {
     try {
         console.log('Starte Verarbeitung der TXT-Datei...');
         console.log(`Textlänge: ${text.length} Zeichen`);
-        await generateMP3(event, text, mp3Path);
+        await generateMP3(event, text, mp3Path, avatar);
         console.log('TXT-Datei erfolgreich verarbeitet.');
     } catch (error) {
         console.error("Fehler beim Umwandeln der TXT-Datei in MP3:", error);

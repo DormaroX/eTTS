@@ -552,12 +552,7 @@
                     <button id="stop-btn" style="background-color: #ff4444;">Stop!</button>
             </div>
                 <div class="button-row">
-                    <select id="avatar-select" class="styled-select">
-                        <option value="Maxx|Ash">Maxx (Ash)</option>
-                        <option value="Terra|Sage">Terra (Sage)</option>
-                        <option value="Nova|Nova">Nova (Nova)</option>
-                        <option value="Nyxari|Coral">Nyxari (Coral)</option>
-                    </select>
+
                     <select id="quality-select" class="styled-select">
                         <option value="128">Schnell (128x128)</option>
                         <option value="256">Standard (256x256)</option>
@@ -691,8 +686,10 @@
 
         // Listen Button Event Listener
         document.getElementById('listen-btn').addEventListener('click', () => {
+            console.log('Listen button clicked');
             const text = document.getElementById('text-input').value;
-            const avatar = document.getElementById('avatar-select').value;
+            const avatar = selectedCharacter;
+            console.log('Sending text to TTS:', { text, avatar });
             window.electronAPI.sendText({ text, avatar });
         });
 
@@ -700,7 +697,7 @@
         document.getElementById('txt2mp4-btn').addEventListener('click', () => {
             console.log('TXT zu MP4 Button geklickt');
             const text = document.getElementById('text-input').value;
-            const avatar = document.getElementById('avatar-select').value;
+            const avatar = selectedCharacter;
             const quality = document.getElementById('quality-select').value;
             const upscale = document.getElementById('upscale-select').value;
             
@@ -717,7 +714,8 @@
         // Save Button Event Listener
         document.getElementById('save-btn').addEventListener('click', () => {
             const text = document.getElementById('text-input').value;
-            window.electronAPI.saveText(text);
+            const avatar = selectedCharacter;
+            window.electronAPI.saveText({ text, avatar });
         });
 
         // TXT zu MP3 Button Event Listener
@@ -756,10 +754,7 @@
                 const currentBlockContribution = (blockProgress / 100) * blockWeight; // Beitrag des aktuellen Blocks
                 const totalProgress = completedBlocksProgress + currentBlockContribution;
 
-                // Zeige die Container
-                document.getElementById('progress-container').style.display = "block";
-                document.getElementById('block-progress-container').style.display = "block";
-                document.getElementById('total-progress-container').style.display = "block";
+
 
                 // Aktualisiere die Fortschrittsbalken
                 document.getElementById('progress-bar').style.width = `${totalProgress}%`;
@@ -789,13 +784,7 @@
                 document.getElementById('block-progress-text').textContent = `Block-Fortschritt: ${Math.round(blockProgress)}%`;
                 document.getElementById('total-progress-text').textContent = `Gesamtfortschritt: ${Math.round(totalProgress)}%`;
 
-                if (progress === 100) {
-                    setTimeout(() => {
-                        document.getElementById('progress-container').style.display = "none";
-                        document.getElementById('block-progress-container').style.display = "none";
-                        document.getElementById('total-progress-container').style.display = "none";
-                    }, 1000);
-                }
+
             });
         });
 
@@ -806,13 +795,12 @@
 
         // Character Carousel
         const characterCards = document.querySelectorAll('.character-card');
-        const avatarSelect = document.getElementById('avatar-select');
+        let selectedCharacter = 'Maxx|Ash';  // Standard-Charakter
 
         // Initialisiere den aktiven Charakter
         const updateActiveCharacter = () => {
-            const selectedValue = avatarSelect.value;
             characterCards.forEach(card => {
-                if (card.dataset.character === selectedValue) {
+                if (card.dataset.character === selectedCharacter) {
                     card.classList.add('active');
                 } else {
                     card.classList.remove('active');
@@ -823,13 +811,14 @@
         // Event-Listener für Charakterkarten
         characterCards.forEach(card => {
             card.addEventListener('click', () => {
-                avatarSelect.value = card.dataset.character;
+                selectedCharacter = card.dataset.character;
                 updateActiveCharacter();
             });
         });
 
-        // Event-Listener für Select-Änderungen
-        avatarSelect.addEventListener('change', updateActiveCharacter);
+        // Initial update
+        updateActiveCharacter();
+
 
         // Initialen Zustand setzen
         updateActiveCharacter();

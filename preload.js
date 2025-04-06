@@ -79,7 +79,10 @@ const electronAPI = {
         }
     },
     stopProcess: () => ipcRenderer.send('stop-process'),
-    sendText: (data) => ipcRenderer.send('tts-playback', data),
+    sendText: (data) => {
+        console.log('preload.js: Sending TTS request:', data);
+        ipcRenderer.send('tts-playback', data);
+    },
     sendTxt2mp4: (data) => {
         console.log('Sende txt2mp4 Request:', data);
         try {
@@ -89,10 +92,10 @@ const electronAPI = {
             console.error('Fehler beim Senden:', error);
         }
     },
-    saveText: (text) => {
+    saveText: (data) => {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         const filePath = `/media/andre/Daten/Projekt Himmelsfeuer/Audio/tts_${timestamp}.mp3`;
-        ipcRenderer.send('tts-save', text, filePath);
+        ipcRenderer.send('tts-save', data.text, filePath, data.avatar);
     },
     uploadTxtFile: async () => {
         try {
@@ -106,7 +109,8 @@ const electronAPI = {
                 const text = await fs.readFile(txtPath, 'utf-8');
                 const txtName = txtPath.split('/').pop().replace('.txt', '');
                 const mp3Path = `/media/andre/Daten/Projekt Himmelsfeuer/Audio/${txtName}.mp3`;
-                ipcRenderer.send('upload-txt-file', text, mp3Path);
+                const avatar = selectedCharacter;
+                ipcRenderer.send('upload-txt-file', text, mp3Path, avatar);
             }
         } catch (error) {
             console.error('Fehler beim Lesen der Datei:', error);

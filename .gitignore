@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+
+# Generated files
+history.json
+electron-debug.log
+
+# Generated content
+assets/videos/*
+!assets/videos/.gitkeep

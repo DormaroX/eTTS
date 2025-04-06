@@ -1,4 +1,4 @@
-# eTTS v1.2
+# eTTS v1.3
 
 Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTalker.
 
@@ -29,10 +29,6 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 - Mindestens 8GB RAM für die Videogenerierung
 - Ca. 5GB freier Speicherplatz für die SadTalker-Modelle
 
-## Known Issues
-
-- Die Wiedergabezeit-Anzeige (verstrichene Zeit/verbleibende Zeit) funktioniert derzeit nicht zuverlässig
-- Die Fortschrittsleiste zeigt möglicherweise nicht die exakte Position im Audio an
 
 ## Installation
 
