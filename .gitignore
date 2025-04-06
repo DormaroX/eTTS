@@ -1,8 +1,15 @@
+# Node
 node_modules/
+
+# Environment
 .env
 .DS_Store
+
+# Assets
 assets/videos/*
 !assets/videos/.gitkeep
+
+# Python
 __pycache__/
 *.pyc
 *.pyo
@@ -19,6 +26,23 @@ lib/
 lib64/
 parts/
 sdist/
+
+# Electron
+electron-debug.log
+
+# Build artifacts
+cuda-keyring*
+cuda-samples/
+
+# Backup files
+*.save
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
 var/
 *.egg-info/
 .installed.cfg
