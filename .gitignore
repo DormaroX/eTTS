@@ -1,29 +1,12 @@
-# Dependency directories
+# Dependencies
 node_modules/
-cuda-samples/
 
-# Environment files
+# Environment
 .env
 
 # Logs
 electron-debug.log
-*.log
 
-# Build artifacts
-dist/
-build/
-
-# Backup files
-*.save
-*.bak
-
-# IDE
-.vscode/
-.idea/
-
-# Assets
+# Generated content
 assets/videos/*
 !assets/videos/.gitkeep
-
-# System files
-.DS_Store
