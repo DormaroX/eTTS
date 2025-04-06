@@ -33,8 +33,9 @@
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             flex-direction: column;
-            height: 100vh;
+            min-height: 100vh;
             padding: 0.5rem;
+            padding-bottom: 1rem;
             position: relative;
         }
 
@@ -98,7 +99,8 @@
         }
 
         .panel-section:last-child {
-            margin-bottom: 0;
+            margin-bottom: 4rem;
+            margin-top: auto;
         }
         .content-wrapper {
             position: absolute;
@@ -159,11 +161,19 @@
             margin-top: 1rem;
             width: 100%;
             display: flex;
+            align-items: center;
             justify-content: center;
+            gap: 0.5rem;
+            padding: 0 1rem;
+        }
+
+        .volume-icon {
+            color: rgba(255, 255, 255, 0.8);
+            font-size: 1.2rem;
         }
 
         .volume-control input[type="range"] {
-            width: 80%;
+            flex-grow: 1;
             height: 5px;
             -webkit-appearance: none;
             appearance: none;
@@ -191,16 +201,31 @@
             background-color: #a00000;
         }
 
+        .time-progress {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin: 0.5rem 1rem;
+        }
+
+        .time {
+            font-family: monospace;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.8);
+            min-width: 45px;
+        }
+
         #progress-container {
-            margin: 20px auto;
+            margin: 10px auto;
             width: calc(100% - 40px);
             max-width: 800px;
             background-color: #333;
             border-radius: 5px;
             height: 25px;
-            display: block;
             position: relative;
+            cursor: pointer;
         }
+
         #progress-bar {
             height: 100%;
             width: 0%;
@@ -208,6 +233,7 @@
             border-radius: 5px;
             transition: width 0.3s ease;
         }
+
         #progress-bar.active {
             background-image: linear-gradient(
                 45deg,
@@ -490,56 +516,60 @@
                 <!-- Playlist-Einträge werden hier dynamisch eingefügt -->
             </div>
             <div id="total-time" class="total-time">Gesamtzeit: 00:00</div>
-
+            </div>
+            <div class="panel-section" style="margin-top: auto; margin-bottom: 0;">
+                <div class="now-playing">
+                    <span id="current-track">Kein Titel ausgewählt</span>
+                </div>
+                <div class="player-controls">
+                    <button class="player-button" id="prev">⏮</button>
+                    <button class="player-button" id="stop">⏹</button>
+                    <button class="player-button" id="play">▶</button>
+                    <button class="player-button" id="next">⏭</button>
+                </div>
+                <div class="time-progress">
+                    <span class="time current">00:00</span>
+                    <div class="progress-container" id="progress-container">
+                        <div class="progress-bar" id="progress-bar"></div>
+                    </div>
+                    <span class="time total">00:00</span>
+                </div>
+                <div class="volume-control">
+                    <span class="volume-icon">🔊</span>
+                    <input type="range" id="volume-slider" min="0" max="100" value="100" />
+                </div>
+            </div>
         </div>
-        <div class="panel-section" style="margin-top: auto; margin-bottom: 0;">
-            <div class="now-playing">
-                <span id="current-track">Kein Titel ausgewählt</span>
-            </div>
-            <div class="progress-container" id="progress-container">
-                <div class="progress-bar" id="progress-bar"></div>
-            </div>
-            <div class="player-controls">
-                <button class="player-button" id="prev">⏮</button>
-                <button class="player-button" id="stop">⏹</button>
-                <button class="player-button" id="play">▶</button>
-                <button class="player-button" id="next">⏭</button>
-            </div>
-            <div class="volume-control">
-                <input type="range" id="volume-slider" min="0" max="100" value="100" />
-            </div>
-        </div>
-    </div>
 
-    <div class="content-wrapper">
-        <div class="controls">
-            <textarea id="text-input" placeholder="Gib deinen Text hier ein..." style="margin-bottom: 10px;"></textarea>
-            <div class="button-row">
-                <button id="listen-btn">Anhören</button>
-                <button id="save-btn">Als MP3 speichern</button>
-                <button id="txt2mp3-btn">txt2mp3</button>
-                <button id="upload-btn">txt2mp3 blocks</button>
-                <button id="stop-btn" style="background-color: #ff4444;">Stop!</button>
+        <div class="content-wrapper">
+            <div class="controls">
+                <textarea id="text-input" placeholder="Gib deinen Text hier ein..." style="margin-bottom: 10px;"></textarea>
+                <div class="button-row">
+                    <button id="listen-btn">Anhören</button>
+                    <button id="save-btn">Als MP3 speichern</button>
+                    <button id="txt2mp3-btn">txt2mp3</button>
+                    <button id="upload-btn">txt2mp3 blocks</button>
+                    <button id="stop-btn" style="background-color: #ff4444;">Stop!</button>
             </div>
-            <div class="button-row">
-                <select id="avatar-select" class="styled-select">
-                    <option value="Maxx|Ash">Maxx (Ash)</option>
-                    <option value="Terra|Sage">Terra (Sage)</option>
-                    <option value="Nova|Nova">Nova (Nova)</option>
-                    <option value="Nyxari|Coral">Nyxari (Coral)</option>
-                </select>
-                <select id="quality-select" class="styled-select">
-                    <option value="128">Schnell (128x128)</option>
-                    <option value="256">Standard (256x256)</option>
-                    <option value="512">Hoch (512x512)</option>
-                </select>
-                <select id="upscale-select" class="styled-select">
-                    <option value="none">Kein Upscaling</option>
-                    <option value="2k">2K Upscaling</option>
-                    <option value="4k">4K Upscaling</option>
-                </select>
-                <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
-            </div>
+                <div class="button-row">
+                    <select id="avatar-select" class="styled-select">
+                        <option value="Maxx|Ash">Maxx (Ash)</option>
+                        <option value="Terra|Sage">Terra (Sage)</option>
+                        <option value="Nova|Nova">Nova (Nova)</option>
+                        <option value="Nyxari|Coral">Nyxari (Coral)</option>
+                    </select>
+                    <select id="quality-select" class="styled-select">
+                        <option value="128">Schnell (128x128)</option>
+                        <option value="256">Standard (256x256)</option>
+                        <option value="512">Hoch (512x512)</option>
+                    </select>
+                    <select id="upscale-select" class="styled-select">
+                        <option value="none">Kein Upscaling</option>
+                        <option value="2k">2K Upscaling</option>
+                        <option value="4k">4K Upscaling</option>
+                    </select>
+                    <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
+                </div>
 
             <div class="character-carousel">
                 <div class="character-card" data-character="Maxx|Ash">
@@ -803,6 +833,35 @@
 
         // Initialen Zustand setzen
         updateActiveCharacter();
+
+        // Funktion zum Formatieren der Zeit
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Event-Listener für Audio-Updates
+        window.electronAPI.onAudioProgress((currentTime, duration) => {
+            const currentTimeEl = document.querySelector('.time.current');
+            const totalTimeEl = document.querySelector('.time.total');
+            
+            // Validiere die Werte
+            if (typeof currentTime === 'number' && !isNaN(currentTime) &&
+                typeof duration === 'number' && !isNaN(duration) && duration > 0) {
+                
+                // Links: Abgespielte Zeit (hochzählend)
+                currentTimeEl.textContent = formatTime(Math.min(currentTime, duration));
+                
+                // Rechts: Verbleibende Zeit (runterzählend)
+                const remainingTime = Math.max(0, duration - currentTime);
+                totalTimeEl.textContent = formatTime(remainingTime);
+            } else {
+                // Standardwerte wenn keine gültigen Zeiten
+                currentTimeEl.textContent = '00:00';
+                totalTimeEl.textContent = '00:00';
+            }
+        });
 
         console.log('Event listeners initialized');
     </script>

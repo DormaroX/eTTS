@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
 const { exec } = require('child_process');
+
+// Erhöhe das Limit für Event Listener
+require('events').EventEmitter.defaultMaxListeners = 20;
 // Konfiguriere dotenv
 const dotenv = require('dotenv');
 const envPath = path.join(__dirname, '.env');
@@ -262,8 +265,20 @@ ipcMain.on('stop-process', (event) => {
     stopRequested = true;
     // Setze Fortschrittsbalken sofort zurück
     event.sender.send('progress-update', 0, 0, 0, 0);
+    // Setze Audio-Progress zurück
+    event.sender.send('audio-progress', 0, 0);
     // Sende sofort eine Bestätigung
     event.sender.send('error', 'Prozess wurde gestoppt');
+});
+
+// Event-Handler für Audio-Progress
+ipcMain.on('audio-progress', (event, currentTime, duration) => {
+    // Validiere die Werte
+    if (typeof currentTime === 'number' && !isNaN(currentTime) &&
+        typeof duration === 'number' && !isNaN(duration)) {
+        // Sende nur gültige Werte
+        event.sender.send('audio-progress', currentTime, duration);
+    }
 });
 
 // Gemeinsame Funktion für die MP3-Generierung

@@ -14,6 +14,11 @@ let isPlaying = false;
 
 // Initialisiere die APIs
 const electronAPI = {
+    onAudioProgress: (callback) => {
+        ipcRenderer.on('audio-progress', (event, currentTime, duration) => {
+            callback(currentTime, duration);
+        });
+    },
     openMusicFolder: async () => {
         try {
             const { filePaths } = await dialog.showOpenDialog({
@@ -257,12 +262,37 @@ contextBridge.exposeInMainWorld('mediaPlayer', {
 });
 
 // Hilfsfunktionen
-function updateProgress() {
-    if (currentSound && currentSound.playing()) {
-        const progress = (currentSound.seek() / currentSound.duration()) * 100;
-        document.getElementById('progress-bar').style.width = `${progress}%`;
-        requestAnimationFrame(updateProgress);
+let timeTracker = null;
+
+function createTimeTracker(url) {
+    // Cleanup vorheriger Tracker
+    if (timeTracker) {
+        timeTracker.pause();
+        timeTracker.remove();
     }
+
+    // Erstelle einen versteckten Audio-Player
+    timeTracker = new Audio();
+    timeTracker.style.display = 'none';
+    timeTracker.src = url;
+
+    // Event-Listener für Zeitaktualisierung
+    timeTracker.addEventListener('timeupdate', () => {
+        if (currentSound && currentSound.playing() && currentIndex >= 0) {
+            const track = playlist[currentIndex];
+            const currentTime = timeTracker.currentTime;
+            const duration = timeTracker.duration;
+
+            // Berechne den Fortschritt
+            const progress = (currentTime / duration) * 100;
+            document.getElementById('progress-bar').style.width = `${progress}%`;
+
+            // Sende aktuelle Position und Dauer
+            ipcRenderer.send('audio-progress', currentTime, duration);
+        }
+    });
+
+    return timeTracker;
 }
 
 function updatePlayButton() {
@@ -481,22 +511,50 @@ function playTrack(index) {
         onplay: () => {
             isPlaying = true;
             updatePlayButton();
-            updateProgress();
+            
+            // Starte den Zeittracker
+            const track = playlist[currentIndex];
+            if (track) {
+                const tracker = createTimeTracker(track.url);
+                tracker.currentTime = currentSound.seek() || 0;
+                tracker.play();
+            }
         },
         onpause: () => {
             isPlaying = false;
             updatePlayButton();
+            // Pausiere den Zeittracker
+            if (timeTracker) {
+                timeTracker.pause();
+            }
         },
         onstop: () => {
             isPlaying = false;
             updatePlayButton();
+            
+            // Stoppe den Zeittracker
+            if (timeTracker) {
+                timeTracker.pause();
+                timeTracker.currentTime = 0;
+            }
+            
+            // Setze Progress zurück
+            ipcRenderer.send('audio-progress', 0, 0);
         },
         onend: () => {
+            // Stoppe den Zeittracker
+            if (timeTracker) {
+                timeTracker.pause();
+                timeTracker.currentTime = 0;
+            }
+            
             if (currentIndex < playlist.length - 1) {
                 playTrack(currentIndex + 1);
             } else {
                 isPlaying = false;
                 updatePlayButton();
+                // Setze Progress zurück
+                ipcRenderer.send('audio-progress', 0, 0);
             }
         }
     });
