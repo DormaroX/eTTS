@@ -493,8 +493,16 @@
             height: 80px;
             border-radius: 50%;
             object-fit: cover;
+            object-position: center center;
             margin-bottom: 8px;
             border: 2px solid rgba(255, 255, 255, 0.2);
+        }
+
+        /* Spezifische Positionierung für Terra, Nova und Nyxari */
+        .character-card[data-character="Terra|Sage"] img,
+        .character-card[data-character="Nova|Nova"] img,
+        .character-card[data-character="Nyxari|Coral"] img {
+            object-position: center top;
         }
 
         .character-card .name {
@@ -563,7 +571,7 @@
                         <option value="2k">2K Upscaling</option>
                         <option value="4k">4K Upscaling</option>
                     </select>
-                    <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
+                    <button id="txt2mp4-btn" style="background-color: #4444ff;">txt2mp4</button>
                 </div>
 
             <div class="character-carousel">
