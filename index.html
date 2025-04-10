@@ -763,37 +763,45 @@
         const carouselNextBtn = document.querySelector('.carousel-nav.next');
         
         if (carousel && carouselPrevBtn && carouselNextBtn) {
-            // Klone die Karten für unendlichen Durchlauf
+            // Klone die Karten für unendlichen Durchlauf (3 Sets)
             const originalCards = Array.from(carousel.children);
-            const clonedCards = originalCards.map(card => card.cloneNode(true));
-            clonedCards.forEach(card => carousel.appendChild(card));
+            
+            // Klone die Karten zweimal
+            const clonedSetsBefore = originalCards.map(card => card.cloneNode(true));
+            const clonedSetsAfter = originalCards.map(card => card.cloneNode(true));
+            
+            // Füge die Klone hinzu (ein Set davor, ein Set danach)
+            clonedSetsBefore.forEach(card => carousel.insertBefore(card, carousel.firstChild));
+            clonedSetsAfter.forEach(card => carousel.appendChild(card));
 
             const cardWidth = 140; // Breite einer Karte inkl. Margin
             const totalOriginalWidth = originalCards.length * cardWidth;
             
-            // Setze initiale Scroll-Position
+            // Setze initiale Scroll-Position auf das mittlere Set
             carousel.scrollLeft = totalOriginalWidth;
             
             let isScrolling = false;
             
-            const handleScroll = () => {
+            const handleInfiniteScroll = () => {
                 if (!isScrolling) {
-                    isScrolling = true;
+                    const currentScroll = carousel.scrollLeft;
                     
-                    // Wenn wir am Ende der geklonten Karten sind
-                    if (carousel.scrollLeft >= totalOriginalWidth * 2) {
-                        carousel.scrollLeft = totalOriginalWidth;
+                    // Wenn wir beim dritten Set sind (zu weit rechts)
+                    if (currentScroll >= totalOriginalWidth * 2) {
+                        isScrolling = true;
+                        carousel.scrollLeft = totalOriginalWidth; // Springe zum mittleren Set
+                        isScrolling = false;
                     }
-                    // Wenn wir am Anfang der Original-Karten sind
-                    else if (carousel.scrollLeft <= 0) {
-                        carousel.scrollLeft = totalOriginalWidth;
+                    // Wenn wir beim ersten Set sind (zu weit links)
+                    else if (currentScroll <= 0) {
+                        isScrolling = true;
+                        carousel.scrollLeft = totalOriginalWidth; // Springe zum mittleren Set
+                        isScrolling = false;
                     }
-                    
-                    isScrolling = false;
                 }
             };
             
-            carousel.addEventListener('scroll', handleScroll);
+            carousel.addEventListener('scroll', handleInfiniteScroll);
             
             carouselPrevBtn.addEventListener('click', () => {
                 carousel.scrollBy({
@@ -813,6 +821,10 @@
             let autoScrollInterval;
             const startAutoScroll = () => {
                 autoScrollInterval = setInterval(() => {
+                    const currentScroll = carousel.scrollLeft;
+                    if (currentScroll >= totalOriginalWidth * 2) {
+                        carousel.scrollLeft = totalOriginalWidth;
+                    }
                     carousel.scrollBy({
                         left: cardWidth,
                         behavior: 'smooth'
