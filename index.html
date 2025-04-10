@@ -506,14 +506,19 @@
             transform: scale(1.02);
         }
 
-        .carousel-container {
+        .carousel-wrapper {
             position: relative;
             margin: 20px auto;
+            max-width: 900px;
+            min-height: 140px;
+        }
+
+        .carousel-container {
+            position: relative;
             padding: 15px;
             background: rgba(0, 0, 0, 0.5);
             border-radius: 10px;
-            max-width: 800px;
-            min-height: 140px;
+            overflow: hidden;
         }
 
         .character-carousel {
@@ -556,11 +561,11 @@
         }
 
         .carousel-nav.prev {
-            left: 10px;
+            left: -20px;
         }
 
         .carousel-nav.next {
-            right: 10px;
+            right: -20px;
         }
 
         .character-card {
@@ -671,50 +676,53 @@
                     <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
                 </div>
 
-            <div class="carousel-container">
-                <button class="carousel-nav prev">&lt;</button>
-                <button class="carousel-nav next">&gt;</button>
-                <div class="character-carousel">
-                <div class="character-card" data-character="Maxx|Ash">
-                    <img src="assets/images/maxx.png" alt="Maxx">
-                    <div class="name">Maxx</div>
+            <div class="carousel-wrapper">
+                <button class="carousel-nav prev">❮</button>
+                <div class="carousel-container">
+                    <div class="character-carousel">
+                        <div class="character-card" data-character="Maxx|Ash">
+                            <img src="assets/images/maxx.png" alt="Maxx">
+                            <div class="name">Maxx</div>
+                        </div>
+                        <div class="character-card" data-character="Terra|Sage">
+                            <img src="assets/images/terra.png" alt="Terra">
+                            <div class="name">Terra</div>
+                        </div>
+                        <div class="character-card" data-character="Nova|Nova">
+                            <img src="assets/images/nova.png" alt="Nova">
+                            <div class="name">Nova</div>
+                        </div>
+                        <div class="character-card" data-character="Nyxari|Coral">
+                            <img src="assets/images/nyxari.png" alt="Nyxari">
+                            <div class="name">Nyxari</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/android_sx-4u.png" alt="Android SX-4U">
+                            <div class="name">Android SX-4U</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/eve.png" alt="Eve">
+                            <div class="name">Eve</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/klingenmeisterin.png" alt="Klingenmeisterin">
+                            <div class="name">Klingenmeisterin</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/madame_burlesque.png" alt="Madame Burlesque">
+                            <div class="name">Madame Burlesque</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/rotes_gift.png" alt="Rotes Gift">
+                            <div class="name">Rotes Gift</div>
+                        </div>
+                        <div class="character-card character-inactive">
+                            <img src="assets/images/schwarze_wittwe.png" alt="Schwarze Wittwe">
+                            <div class="name">Schwarze Wittwe</div>
+                        </div>
+                    </div>
                 </div>
-                <div class="character-card" data-character="Terra|Sage">
-                    <img src="assets/images/terra.png" alt="Terra">
-                    <div class="name">Terra</div>
-                </div>
-                <div class="character-card" data-character="Nova|Nova">
-                    <img src="assets/images/nova.png" alt="Nova">
-                    <div class="name">Nova</div>
-                </div>
-                <div class="character-card" data-character="Nyxari|Coral">
-                    <img src="assets/images/nyxari.png" alt="Nyxari">
-                    <div class="name">Nyxari</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/android_sx-4u.png" alt="Android SX-4U">
-                    <div class="name">Android SX-4U</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/eve.png" alt="Eve">
-                    <div class="name">Eve</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/klingenmeisterin.png" alt="Klingenmeisterin">
-                    <div class="name">Klingenmeisterin</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/madame_burlesque.png" alt="Madame Burlesque">
-                    <div class="name">Madame Burlesque</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/rotes_gift.png" alt="Rotes Gift">
-                    <div class="name">Rotes Gift</div>
-                </div>
-                <div class="character-card character-inactive">
-                    <img src="assets/images/schwarze_wittwe.png" alt="Schwarze Wittwe">
-                    <div class="name">Schwarze Wittwe</div>
-                </div>
+                <button class="carousel-nav next">❯</button>
             </div>
             
             <div id="progress-container">
@@ -755,30 +763,56 @@
         
         if (carousel && carouselPrevBtn && carouselNextBtn) {
             const scrollAmount = 200; // Pixel pro Scroll
+            const cardWidth = 140; // Breite einer Karte inkl. Margin
+            
+            const scrollToStart = () => {
+                carousel.scrollTo({ left: carousel.scrollWidth - carousel.clientWidth, behavior: 'instant' });
+            };
+            
+            const scrollToEnd = () => {
+                carousel.scrollTo({ left: 0, behavior: 'instant' });
+            };
             
             carouselPrevBtn.addEventListener('click', () => {
-                carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+                if (carousel.scrollLeft <= 0) {
+                    scrollToStart();
+                    setTimeout(() => carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' }), 50);
+                } else {
+                    carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+                }
             });
             
             carouselNextBtn.addEventListener('click', () => {
-                carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+                if (carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth) {
+                    scrollToEnd();
+                    setTimeout(() => carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' }), 50);
+                } else {
+                    carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+                }
             });
             
-            // Verstecke Pfeile am Anfang/Ende
-            const updateArrows = () => {
-                const isAtStart = carousel.scrollLeft <= 0;
-                const isAtEnd = carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth;
-                
-                carouselPrevBtn.style.opacity = isAtStart ? '0.3' : '1';
-                carouselNextBtn.style.opacity = isAtEnd ? '0.3' : '1';
-                
-                carouselPrevBtn.style.pointerEvents = isAtStart ? 'none' : 'auto';
-                carouselNextBtn.style.pointerEvents = isAtEnd ? 'none' : 'auto';
+            // Automatisches Scrollen
+            let autoScrollInterval;
+            const startAutoScroll = () => {
+                autoScrollInterval = setInterval(() => {
+                    if (carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth) {
+                        scrollToEnd();
+                    }
+                    carousel.scrollBy({ left: cardWidth, behavior: 'smooth' });
+                }, 3000);
             };
             
-            carousel.addEventListener('scroll', updateArrows);
-            window.addEventListener('resize', updateArrows);
-            updateArrows(); // Initial-Check
+            const stopAutoScroll = () => {
+                clearInterval(autoScrollInterval);
+            };
+            
+            carousel.addEventListener('mouseenter', stopAutoScroll);
+            carousel.addEventListener('mouseleave', startAutoScroll);
+            carouselPrevBtn.addEventListener('mouseenter', stopAutoScroll);
+            carouselNextBtn.addEventListener('mouseenter', stopAutoScroll);
+            
+            // Starte automatisches Scrollen
+            startAutoScroll();
         }
         
         // Playlist Container
