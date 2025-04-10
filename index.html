@@ -509,8 +509,9 @@
         .carousel-wrapper {
             position: relative;
             margin: 20px auto;
-            max-width: 900px;
+            max-width: 800px;
             min-height: 140px;
+            padding: 0 60px;
         }
 
         .carousel-container {
@@ -561,11 +562,11 @@
         }
 
         .carousel-nav.prev {
-            left: -20px;
+            left: -50px;
         }
 
         .carousel-nav.next {
-            right: -20px;
+            right: -50px;
         }
 
         .character-card {
@@ -762,43 +763,60 @@
         const carouselNextBtn = document.querySelector('.carousel-nav.next');
         
         if (carousel && carouselPrevBtn && carouselNextBtn) {
-            const scrollAmount = 200; // Pixel pro Scroll
+            // Klone die Karten für unendlichen Durchlauf
+            const originalCards = Array.from(carousel.children);
+            const clonedCards = originalCards.map(card => card.cloneNode(true));
+            clonedCards.forEach(card => carousel.appendChild(card));
+
             const cardWidth = 140; // Breite einer Karte inkl. Margin
+            const totalOriginalWidth = originalCards.length * cardWidth;
             
-            const scrollToStart = () => {
-                carousel.scrollTo({ left: carousel.scrollWidth - carousel.clientWidth, behavior: 'instant' });
+            // Setze initiale Scroll-Position
+            carousel.scrollLeft = totalOriginalWidth;
+            
+            let isScrolling = false;
+            
+            const handleScroll = () => {
+                if (!isScrolling) {
+                    isScrolling = true;
+                    
+                    // Wenn wir am Ende der geklonten Karten sind
+                    if (carousel.scrollLeft >= totalOriginalWidth * 2) {
+                        carousel.scrollLeft = totalOriginalWidth;
+                    }
+                    // Wenn wir am Anfang der Original-Karten sind
+                    else if (carousel.scrollLeft <= 0) {
+                        carousel.scrollLeft = totalOriginalWidth;
+                    }
+                    
+                    isScrolling = false;
+                }
             };
             
-            const scrollToEnd = () => {
-                carousel.scrollTo({ left: 0, behavior: 'instant' });
-            };
+            carousel.addEventListener('scroll', handleScroll);
             
             carouselPrevBtn.addEventListener('click', () => {
-                if (carousel.scrollLeft <= 0) {
-                    scrollToStart();
-                    setTimeout(() => carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' }), 50);
-                } else {
-                    carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
-                }
+                carousel.scrollBy({
+                    left: -cardWidth * 2,
+                    behavior: 'smooth'
+                });
             });
             
             carouselNextBtn.addEventListener('click', () => {
-                if (carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth) {
-                    scrollToEnd();
-                    setTimeout(() => carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' }), 50);
-                } else {
-                    carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' });
-                }
+                carousel.scrollBy({
+                    left: cardWidth * 2,
+                    behavior: 'smooth'
+                });
             });
             
             // Automatisches Scrollen
             let autoScrollInterval;
             const startAutoScroll = () => {
                 autoScrollInterval = setInterval(() => {
-                    if (carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth) {
-                        scrollToEnd();
-                    }
-                    carousel.scrollBy({ left: cardWidth, behavior: 'smooth' });
+                    carousel.scrollBy({
+                        left: cardWidth,
+                        behavior: 'smooth'
+                    });
                 }, 3000);
             };
             
