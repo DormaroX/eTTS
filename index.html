@@ -506,29 +506,82 @@
             transform: scale(1.02);
         }
 
-        .character-carousel {
-            display: flex;
-            justify-content: center;
-            gap: 20px;
+        .carousel-container {
+            position: relative;
             margin: 20px auto;
             padding: 15px;
             background: rgba(0, 0, 0, 0.5);
             border-radius: 10px;
             max-width: 800px;
-            min-height: 140px; /* Fixe Höhe für das Carousel */
+            min-height: 140px;
+        }
+
+        .character-carousel {
+            display: flex;
+            gap: 20px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            scrollbar-width: none;
+            -ms-overflow-style: none;
+            padding: 0 40px;
+            margin: 0;
+        }
+
+        .character-carousel::-webkit-scrollbar {
+            display: none;
+        }
+
+        .carousel-nav {
+            position: absolute;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            border: none;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            z-index: 2;
+            font-size: 20px;
+            font-weight: bold;
+        }
+
+        .carousel-nav:hover {
+            background: rgba(0, 0, 0, 0.8);
+        }
+
+        .carousel-nav.prev {
+            left: 10px;
+        }
+
+        .carousel-nav.next {
+            right: 10px;
         }
 
         .character-card {
             text-align: center;
             padding: 10px;
             border-radius: 8px;
-            background: rgba(255, 255, 255, 0.1);
+            background: rgba(60, 60, 60, 0.8);
             cursor: pointer;
             border: 2px solid transparent;
+            flex: 0 0 auto;
+            width: 120px;
         }
 
         .character-card.active {
             border: 2px solid #4CAF50;
+            background: rgba(29, 185, 84, 0.3);
+        }
+
+        .character-card:hover:not(.character-inactive) {
+            background: rgba(80, 80, 80, 0.8);
+            transform: translateY(-2px);
         }
 
         .character-card img {
@@ -538,6 +591,11 @@
             object-fit: cover;
             margin-bottom: 8px;
             border: 2px solid rgba(255, 255, 255, 0.2);
+            transition: transform 0.3s;
+        }
+
+        .character-card:hover:not(.character-inactive) img {
+            transform: scale(1.05);
         }
 
         .character-card .name {
@@ -545,6 +603,10 @@
             font-size: 14px;
             font-weight: bold;
             text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.5);
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            padding: 0 5px;
         }
     </style>
 </head>
