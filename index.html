@@ -531,6 +531,9 @@
             -ms-overflow-style: none;
             padding: 0 40px;
             margin: 0;
+            justify-content: center;
+            align-items: center;
+            min-height: 180px;
         }
 
         .character-carousel::-webkit-scrollbar {
@@ -580,7 +583,7 @@
             width: 120px;
         }
 
-        .character-card.active {
+        .character-card[data-selected="true"] {
             border: 2px solid #4CAF50;
             background: rgba(29, 185, 84, 0.3);
         }
@@ -766,13 +769,57 @@
             // Klone die Karten für unendlichen Durchlauf (3 Sets)
             const originalCards = Array.from(carousel.children);
             
-            // Klone die Karten zweimal
-            const clonedSetsBefore = originalCards.map(card => card.cloneNode(true));
-            const clonedSetsAfter = originalCards.map(card => card.cloneNode(true));
+            // Klone die Karten zweimal und füge data-set Attribute hinzu
+            const clonedSetsBefore = originalCards.map(card => {
+                const clone = card.cloneNode(true);
+                clone.setAttribute('data-set', 'before');
+                return clone;
+            });
             
-            // Füge die Klone hinzu (ein Set davor, ein Set danach)
-            clonedSetsBefore.forEach(card => carousel.insertBefore(card, carousel.firstChild));
-            clonedSetsAfter.forEach(card => carousel.appendChild(card));
+            originalCards.forEach(card => card.setAttribute('data-set', 'original'));
+            
+            const clonedSetsAfter = originalCards.map(card => {
+                const clone = card.cloneNode(true);
+                clone.setAttribute('data-set', 'after');
+                return clone;
+            });
+            
+            // Füge die Klone hinzu
+            clonedSetsBefore.forEach(card => {
+                carousel.insertBefore(card, carousel.firstChild);
+                // Kopiere die Auswahl vom Original
+                const originalCard = originalCards.find(o => o.getAttribute('data-character') === card.getAttribute('data-character'));
+                if (originalCard && originalCard.hasAttribute('data-selected')) {
+                    card.setAttribute('data-selected', 'true');
+                }
+            });
+            
+            clonedSetsAfter.forEach(card => {
+                carousel.appendChild(card);
+                // Kopiere die Auswahl vom Original
+                const originalCard = originalCards.find(o => o.getAttribute('data-character') === card.getAttribute('data-character'));
+                if (originalCard && originalCard.hasAttribute('data-selected')) {
+                    card.setAttribute('data-selected', 'true');
+                }
+            });
+            
+            // Event-Listener für Kartenauswahl
+            carousel.addEventListener('click', (e) => {
+                const card = e.target.closest('.character-card');
+                if (card && !card.classList.contains('character-inactive')) {
+                    const character = card.getAttribute('data-character');
+                    
+                    // Entferne Auswahl von allen Karten
+                    carousel.querySelectorAll('.character-card').forEach(c => {
+                        c.removeAttribute('data-selected');
+                    });
+                    
+                    // Wähle alle Karten mit gleichem Character aus
+                    carousel.querySelectorAll(`.character-card[data-character="${character}"]`).forEach(c => {
+                        c.setAttribute('data-selected', 'true');
+                    });
+                }
+            });
 
             const cardWidth = 140; // Breite einer Karte inkl. Margin
             const totalOriginalWidth = originalCards.length * cardWidth;
