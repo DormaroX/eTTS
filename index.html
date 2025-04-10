@@ -609,7 +609,10 @@
                     <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
                 </div>
 
-            <div class="character-carousel">
+            <div class="carousel-container">
+                <button class="carousel-nav prev">&lt;</button>
+                <button class="carousel-nav next">&gt;</button>
+                <div class="character-carousel">
                 <div class="character-card" data-character="Maxx|Ash">
                     <img src="assets/images/maxx.png" alt="Maxx">
                     <div class="name">Maxx</div>
@@ -682,6 +685,39 @@
         }
 
         console.log('Initializing event listeners...');
+        
+        // Carousel Navigation
+        const carousel = document.querySelector('.character-carousel');
+        const carouselPrevBtn = document.querySelector('.carousel-nav.prev');
+        const carouselNextBtn = document.querySelector('.carousel-nav.next');
+        
+        if (carousel && carouselPrevBtn && carouselNextBtn) {
+            const scrollAmount = 200; // Pixel pro Scroll
+            
+            carouselPrevBtn.addEventListener('click', () => {
+                carousel.scrollBy({ left: -scrollAmount, behavior: 'smooth' });
+            });
+            
+            carouselNextBtn.addEventListener('click', () => {
+                carousel.scrollBy({ left: scrollAmount, behavior: 'smooth' });
+            });
+            
+            // Verstecke Pfeile am Anfang/Ende
+            const updateArrows = () => {
+                const isAtStart = carousel.scrollLeft <= 0;
+                const isAtEnd = carousel.scrollLeft + carousel.clientWidth >= carousel.scrollWidth;
+                
+                carouselPrevBtn.style.opacity = isAtStart ? '0.3' : '1';
+                carouselNextBtn.style.opacity = isAtEnd ? '0.3' : '1';
+                
+                carouselPrevBtn.style.pointerEvents = isAtStart ? 'none' : 'auto';
+                carouselNextBtn.style.pointerEvents = isAtEnd ? 'none' : 'auto';
+            };
+            
+            carousel.addEventListener('scroll', updateArrows);
+            window.addEventListener('resize', updateArrows);
+            updateArrows(); // Initial-Check
+        }
         
         // Playlist Container
         const playlistContainer = document.getElementById('playlist-items');
