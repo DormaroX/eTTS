@@ -201,6 +201,27 @@
             background-color: #a00000;
         }
 
+        .character-inactive {
+            filter: grayscale(100%) opacity(50%);
+            cursor: not-allowed;
+            position: relative;
+        }
+
+        .character-inactive::before {
+            content: 'Coming Soon';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(-30deg);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+            white-space: nowrap;
+            z-index: 1;
+        }
+
         .time-progress {
             display: flex;
             align-items: center;
@@ -604,6 +625,30 @@
                 <div class="character-card" data-character="Nyxari|Coral">
                     <img src="assets/images/nyxari.png" alt="Nyxari">
                     <div class="name">Nyxari</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/android_sx-4u.png" alt="Android SX-4U">
+                    <div class="name">Android SX-4U</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/eve.png" alt="Eve">
+                    <div class="name">Eve</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/klingenmeisterin.png" alt="Klingenmeisterin">
+                    <div class="name">Klingenmeisterin</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/madame_burlesque.png" alt="Madame Burlesque">
+                    <div class="name">Madame Burlesque</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/rotes_gift.png" alt="Rotes Gift">
+                    <div class="name">Rotes Gift</div>
+                </div>
+                <div class="character-card character-inactive">
+                    <img src="assets/images/schwarze_wittwe.png" alt="Schwarze Wittwe">
+                    <div class="name">Schwarze Wittwe</div>
                 </div>
             </div>
             
