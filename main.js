@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsPromises = require('fs').promises;
@@ -76,17 +76,22 @@ function createWindow() {
             webSecurity: true,
             allowRunningInsecureContent: false,
             preload: path.join(__dirname, 'preload.js'),
-            devTools: false
+            devTools: true
         },
         title: 'eTTS by dormarox',
     });
 
     require('@electron/remote/main').enable(mainWindow.webContents);
 
+    // Aktiviere die Tastenkombination für DevTools
+    globalShortcut.register('CommandOrControl+Shift+I', () => {
+        mainWindow.webContents.toggleDevTools();
+    });
+
     mainWindow.loadFile('index.html')
         .then(() => {
-            // DevTools nur im Entwicklungsmodus öffnen
-            if (process.env.NODE_ENV === 'development') {
+            // DevTools im Entwicklungsmodus immer öffnen
+            if (process.argv.includes('dev')) {
                 mainWindow.webContents.openDevTools();
             }
         })
@@ -268,8 +273,6 @@ ipcMain.on('stop-process', (event) => {
     event.sender.send('progress-update', 0, 0, 0, 0);
     // Setze Audio-Progress zurück
     event.sender.send('audio-progress', 0, 0);
-    // Sende sofort eine Bestätigung
-    event.sender.send('error', 'Prozess wurde gestoppt');
 });
 
 // Event-Handler für Audio-Progress
@@ -282,109 +285,201 @@ ipcMain.on('audio-progress', (event, currentTime, duration) => {
     }
 });
 
-// Gemeinsame Funktion für die MP3-Generierung
-async function generateMP3(event, text, outputPath, avatar) {
-    // Hole die Stimme aus dem Avatar-Mapping
-    const avatarName = avatar.split('|')[0].trim();
-    const avatarInfo = AVATAR_VOICE_MAP[avatarName];
-    if (!avatarInfo) {
-        throw new Error(`Ungültiger Avatar: ${avatarName}`);
-    }
-    const voice = avatarInfo.voice;
-    // Setze stopRequested zurück
+// Funktion für die Verarbeitung von Textdateien als eine MP3
+async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
     stopRequested = false;
-    if (!text || text.trim() === '') {
-        throw new Error('Der Text ist leer.');
-    }
-
-    // Prüfe das Ausgabeverzeichnis
-    const outputDir = path.dirname(outputPath);
-    const dirCheck = checkOutputDirectory(outputDir);
-    
-    if (!dirCheck.available) {
-        // Versuche, im Musik-Verzeichnis zu speichern
-        const homeDir = path.join(app.getPath('music'), 'eTTS-Export');
-        
-        // Erstelle das Verzeichnis, falls es nicht existiert
-        if (!fs.existsSync(homeDir)) {
-            await fsPromises.mkdir(homeDir, { recursive: true });
+    try {
+        if (stopRequested) {
+            stopRequested = false;
+            return;
         }
+
+        // Prüfe das Ausgabeverzeichnis
+        const outputDir = path.dirname(outputPath);
+        const dirCheck = checkOutputDirectory(outputDir);
         
-        // Verwende Musik-Verzeichnis als Alternative
-        outputPath = path.join(homeDir, path.basename(outputPath));
-        console.log(`Verwende alternativen Speicherort: ${homeDir}`);
-    }
+        if (!dirCheck.available) {
+            throw new Error(`Speicherort nicht verfügbar: ${dirCheck.error}`);
+        }
 
-    event.sender.send('progress-update', 0, 0, 0, 0);
-    
-    // Teile den Text in Blöcke auf
-    const blocks = splitTextIntoChunks(text, MAX_CHARS);
-    const totalBlocks = blocks.length;
-    let currentBlock = 0;
+        // Hole die Stimme aus dem Avatar-Mapping
+        const avatarName = avatar.split('|')[0].trim();
+        const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+        if (!avatarInfo) {
+            throw new Error(`Ungültiger Avatar: ${avatarName}`);
+        }
+        const voice = avatarInfo.voice;
 
-    // Erstelle Basis-Dateinamen ohne .mp3 Erweiterung
-    const outputBaseName = path.join(path.dirname(outputPath), path.basename(outputPath, '.mp3'));
+        // Teile den Text in Blöcke auf (für OpenAI Limit)
+        const blocks = splitTextIntoChunks(text, MAX_CHARS);
+        const totalBlocks = blocks.length;
+        let currentBlock = 0;
+        let combinedAudioBuffer = Buffer.alloc(0);
 
-    // Verarbeite jeden Block
-    for (const block of blocks) {
-        currentBlock++;
-        
-        // Schreibe Text für Nova TTS
-        writeToTTS(block);
-
-        // Erstelle einen Fortschrittsevent für den Block
-        const updateBlockProgress = (progress) => {
-            // Berechne den Fortschritt für den Block-Übersichtsbalken (erster Balken)
-            const blockOverviewProgress = ((currentBlock - 1 + (progress / 100)) / totalBlocks) * 100;
-            
-            // Gesamtfortschritt: Nur abgeschlossene Blöcke zählen
-            const overallProgress = ((currentBlock - 1) / totalBlocks) * 100;
-            
-            // Sende Updates: blockOverviewProgress, totalBlocks, currentBlock, blockProgress
-            event.sender.send('progress-update', blockOverviewProgress, totalBlocks, currentBlock, progress);
-        };
-
-        try {
-            // Prüfe ob Stop angefordert wurde
+        // Verarbeite jeden Block einzeln und kombiniere sie
+        for (const block of blocks) {
             if (stopRequested) {
-                event.sender.send('progress-update', 0, 0, 0, 0);
+                console.log('Prozess wurde gestoppt');
                 return;
             }
 
-            // Initialisiere Fortschritt für diesen Block
-            updateBlockProgress(0);
+            currentBlock++;
+            const progress = (currentBlock / totalBlocks) * 100;
 
-            // Generiere MP3 für diesen Block
+            console.log(`Verarbeite Block ${currentBlock} von ${totalBlocks}...`);
+            event.sender.send('progress-update', progress, totalBlocks, currentBlock, progress);
+
             const response = await openai.audio.speech.create({
-                model: "tts-1",
+                model: "tts-1-hd",
                 voice: voice,
                 input: block,
                 response_format: "mp3"
             });
 
-            // Erstelle den Dateinamen für diesen Block
-            const blockFileName = `${outputBaseName}-Block${currentBlock.toString().padStart(3, '0')}.mp3`;
-
-            // Speichere die MP3-Datei
-            const audioBuffer = Buffer.from(await response.arrayBuffer());
-            await fsPromises.writeFile(blockFileName, audioBuffer);
-
-            // Block erfolgreich verarbeitet
-            updateBlockProgress(100);
-            console.log(`Block ${currentBlock} gespeichert als: ${path.basename(blockFileName)}`);
-
-        } catch (error) {
-            console.error(`Fehler bei Block ${currentBlock}:`, error);
-            event.sender.send('error', `Fehler bei Block ${currentBlock}: ${error.message}`);
-            throw error;
+            const blockBuffer = Buffer.from(await response.arrayBuffer());
+            combinedAudioBuffer = Buffer.concat([combinedAudioBuffer, blockBuffer]);
         }
-    }
 
-    // Benachrichtige den Renderer-Prozess über den Abschluss
-    event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
+        console.log('Speichere kombinierte AudioBuffer...');
+        await fsPromises.writeFile(outputPath, combinedAudioBuffer);
+
+        event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
+        event.sender.send('tts-save-result', outputPath);
+        event.sender.send('save-complete', `TXT-zu-MP3 Konvertierung abgeschlossen: ${path.basename(outputPath)}`);
+        console.log(`MP3-Datei gespeichert als: ${path.basename(outputPath)}`);
+
+    } catch (error) {
+        console.error("Fehler bei der MP3-Generierung:", error);
+        event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
+        throw error;
+    }
+}
+
+// Funktion für die block-basierte MP3-Generierung mit separaten Dateien
+async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
+    stopRequested = false;
+    try {
+        if (stopRequested) {
+            stopRequested = false;
+            return;
+        }
+
+        // Prüfe das Ausgabeverzeichnis
+        const outputDir = path.dirname(outputPath);
+        const dirCheck = checkOutputDirectory(outputDir);
+        
+        if (!dirCheck.available) {
+            throw new Error(`Speicherort nicht verfügbar: ${dirCheck.error}`);
+        }
+
+        // Hole die Stimme aus dem Avatar-Mapping
+        const avatarName = avatar.split('|')[0].trim();
+        const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+        if (!avatarInfo) {
+            throw new Error(`Ungültiger Avatar: ${avatarName}`);
+        }
+        const voice = avatarInfo.voice;
+
+        // Teile den Text in Blöcke auf
+        const blocks = splitTextIntoChunks(text, MAX_CHARS);
+        const totalBlocks = blocks.length;
+        let currentBlock = 0;
+
+        // Erstelle Basis-Dateinamen ohne .mp3 Erweiterung
+        const outputBaseName = outputPath.replace('.mp3', '');
+
+        // Verarbeite jeden Block einzeln
+        for (const block of blocks) {
+            if (stopRequested) {
+                console.log('Prozess wurde gestoppt');
+                return;
+            }
+
+            currentBlock++;
+            const progress = (currentBlock / totalBlocks) * 100;
+
+            console.log(`Verarbeite Block ${currentBlock} von ${totalBlocks}...`);
+            event.sender.send('progress-update', progress, totalBlocks, currentBlock, progress);
+
+            // Erstelle den Dateinamen für diesen Block
+            const blockPath = blocks.length > 1 ? `${outputBaseName}_${currentBlock}.mp3` : outputPath;
+
+            const response = await openai.audio.speech.create({
+                model: "tts-1-hd",
+                voice: voice,
+                input: block,
+                response_format: "mp3"
+            });
+
+            // Speichere die Block-MP3
+            const blockBuffer = Buffer.from(await response.arrayBuffer());
+            await fsPromises.writeFile(blockPath, blockBuffer);
+
+            console.log(`Block ${currentBlock} gespeichert als: ${path.basename(blockPath)}`);
+        }
+
+        event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
+        event.sender.send('tts-save-result', outputPath);
+        console.log('Alle Blöcke wurden erfolgreich gespeichert.');
+
+    } catch (error) {
+        console.error("Fehler bei der MP3-Generierung:", error);
+        event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
+        throw error;
+    }
 }
 
 
+// Funktion zum Speichern von Text aus dem Textfeld als MP3
+async function save2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
+    stopRequested = false;
+    try {
+        if (stopRequested) {
+            stopRequested = false;
+            return;
+        }
+
+        // Prüfe das Ausgabeverzeichnis
+        const outputDir = path.dirname(outputPath);
+        const dirCheck = checkOutputDirectory(outputDir);
+        
+        if (!dirCheck.available) {
+            throw new Error(`Speicherort nicht verfügbar: ${dirCheck.error}`);
+        }
+
+        // Hole die Stimme aus dem Avatar-Mapping
+        const avatarName = avatar.split('|')[0].trim();
+        const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+        if (!avatarInfo) {
+            throw new Error(`Ungültiger Avatar: ${avatarName}`);
+        }
+        const voice = avatarInfo.voice;
+
+        // Generiere die MP3
+        event.sender.send('progress-update', 0, 1, 0, 0);
+        
+        const response = await openai.audio.speech.create({
+            model: "tts-1-hd",
+            voice: voice,
+            input: text,
+            response_format: "mp3"
+        });
+
+        // Speichere die MP3-Datei
+        const buffer = Buffer.from(await response.arrayBuffer());
+        await fsPromises.writeFile(outputPath, buffer);
+
+        event.sender.send('progress-update', 100, 1, 1, 100);
+        event.sender.send('tts-save-result', outputPath);
+        event.sender.send('save-complete', `MP3-Datei erfolgreich gespeichert als: ${path.basename(outputPath)}`);
+        console.log(`MP3-Datei gespeichert als: ${path.basename(outputPath)}`);
+
+    } catch (error) {
+        console.error("Fehler bei der MP3-Generierung:", error);
+        event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
+        throw error;
+    }
+}
 
 // "Als MP3 speichern" (höhere Qualität mit `tts-1-hd`)
 ipcMain.on('tts-save', async (event, text, filePath, avatar) => {
@@ -392,10 +487,7 @@ ipcMain.on('tts-save', async (event, text, filePath, avatar) => {
         if (stopRequested) {
             return;
         }
-        await generateMP3(event, text, filePath, avatar);
-        if (!stopRequested) {
-            event.sender.send('tts-save-result', filePath);
-        }
+        await save2mp3(event, text, filePath, avatar);
     } catch (error) {
         if (!stopRequested) {
             console.error("Fehler beim Speichern der MP3-Datei:", error);
@@ -409,8 +501,12 @@ ipcMain.on('upload-txt-file', async (event, text, mp3Path, avatar) => {
     try {
         console.log('Starte Verarbeitung der TXT-Datei...');
         console.log(`Textlänge: ${text.length} Zeichen`);
-        await generateMP3(event, text, mp3Path, avatar);
+
+        // Generiere MP3s in Blöcken
+        await txt2mp3blocks(event, text, mp3Path, avatar);
+
         console.log('TXT-Datei erfolgreich verarbeitet.');
+        event.sender.send('save-complete', `TXT-zu-MP3 Konvertierung abgeschlossen: ${path.basename(mp3Path)}`);
     } catch (error) {
         console.error("Fehler beim Umwandeln der TXT-Datei in MP3:", error);
         event.sender.send('error', `Fehler beim Konvertieren der TXT-Datei: ${error.message}`);
@@ -499,51 +595,14 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
 ipcMain.on('txt2mp3', async (event, text, outputPath) => {
     try {
         if (stopRequested) {
-            stopRequested = false;
             return;
         }
-
-        // Prüfe das Ausgabeverzeichnis
-        const outputDir = path.dirname(outputPath);
-        const dirCheck = checkOutputDirectory(outputDir);
-        
-        if (!dirCheck.available) {
-            throw new Error(`Speicherort nicht verfügbar: ${dirCheck.error}`);
-        }
-
-        // Teile den Text in Blöcke auf
-        const blocks = splitTextIntoChunks(text, MAX_CHARS);
-        const totalBlocks = blocks.length;
-        let currentBlock = 0;
-        let combinedAudioBuffer = Buffer.alloc(0);
-
-        for (const block of blocks) {
-            currentBlock++;
-            const progress = (currentBlock / totalBlocks) * 100;
-
-            console.log(`Verarbeite Block ${currentBlock} von ${totalBlocks}...`);
-            event.sender.send('progress-update', progress, totalBlocks, currentBlock, progress);
-
-            const response = await openai.audio.speech.create({
-                model: "tts-1-hd",
-                voice: "nova",
-                input: block,
-                response_format: "mp3"
-            });
-
-            const blockBuffer = Buffer.from(await response.arrayBuffer());
-            combinedAudioBuffer = Buffer.concat([combinedAudioBuffer, blockBuffer]);
-        }
-
-        console.log('Speichere kombinierte AudioBuffer...');
-        await fsPromises.writeFile(outputPath, combinedAudioBuffer);
-
-        event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
-        event.sender.send('tts-save-result', outputPath);
-        console.log(`MP3-Datei gespeichert als: ${path.basename(outputPath)}`);
-
+        await txt2mp3(event, text, outputPath);
+        event.sender.send('save-complete', `TXT-zu-MP3 Konvertierung abgeschlossen: ${path.basename(outputPath)}`);
     } catch (error) {
-        console.error("Fehler bei der MP3-Generierung:", error);
-        event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
+        if (!stopRequested) {
+            console.error("Fehler bei der MP3-Generierung:", error);
+            event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
+        }
     }
 });

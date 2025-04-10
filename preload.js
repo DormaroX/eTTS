@@ -14,6 +14,11 @@ let isPlaying = false;
 
 // Initialisiere die APIs
 const electronAPI = {
+    onProcessComplete: (callback) => {
+        ipcRenderer.on('process-complete', (event, message) => {
+            callback(message);
+        });
+    },
     onAudioProgress: (callback) => {
         ipcRenderer.on('audio-progress', (event, currentTime, duration) => {
             callback(currentTime, duration);
@@ -92,42 +97,90 @@ const electronAPI = {
             console.error('Fehler beim Senden:', error);
         }
     },
-    saveText: (data) => {
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        const filePath = `/media/andre/Daten/Projekt Himmelsfeuer/Audio/tts_${timestamp}.mp3`;
-        ipcRenderer.send('tts-save', data.text, filePath, data.avatar);
+    saveText: async (data) => {
+        try {
+            const { filePath } = await dialog.showSaveDialog({
+                title: 'MP3 speichern unter',
+                defaultPath: `tts_${new Date().toISOString().replace(/[:.]/g, '-')}.mp3`,
+                filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
+            });
+
+            if (!filePath) {
+                console.log('Keine Datei ausgewählt');
+                return;
+            }
+
+            ipcRenderer.send('tts-save', data.text, filePath, data.avatar);
+        } catch (error) {
+            console.error('Fehler beim Speichern:', error);
+        }
     },
     uploadTxtFile: async () => {
+        console.log('1. txt2mp3-blocks function called');
         try {
             const { filePaths } = await dialog.showOpenDialog({
                 properties: ['openFile'],
                 filters: [{ name: 'Text Files', extensions: ['txt'] }]
             });
+            console.log('2. Nach Dateiauswahl:', filePaths);
 
             if (filePaths && filePaths.length > 0) {
                 const txtPath = filePaths[0];
-                const text = await fs.readFile(txtPath, 'utf-8');
-                const txtName = txtPath.split('/').pop().replace('.txt', '');
-                const mp3Path = `/media/andre/Daten/Projekt Himmelsfeuer/Audio/${txtName}.mp3`;
-                const avatar = selectedCharacter;
-                ipcRenderer.send('upload-txt-file', text, mp3Path, avatar);
+                console.log('3. Gewählter Textpfad:', txtPath);
+                const text = await fsPromises.readFile(txtPath, 'utf-8');
+                console.log('4. Text gelesen, Länge:', text.length);
+                
+                // Speicherort wählen
+                const { filePath: mp3Path } = await dialog.showSaveDialog({
+                    title: 'MP3 speichern unter',
+                    defaultPath: txtPath.replace('.txt', '.mp3'),
+                    filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
+                });
+                console.log('5. Gewählter MP3-Pfad:', mp3Path);
+
+                if (!mp3Path) {
+                    console.log('6a. Kein MP3-Pfad gewählt, Abbruch');
+                    return;
+                }
+                
+                // Hole den aktuell ausgewählten Avatar
+                const selectedAvatar = document.querySelector('input[name="character"]:checked')?.value || 'Nova|Nova';
+                console.log('6b. Sende upload-txt-file Event mit:', { text: text.substring(0, 50) + '...', mp3Path, avatar: selectedAvatar });
+                ipcRenderer.send('upload-txt-file', text, mp3Path, selectedAvatar);
             }
         } catch (error) {
             console.error('Fehler beim Lesen der Datei:', error);
         }
     },
     txt2mp3: async () => {
+        console.log('1. txt2mp3 function called');
         try {
             const { filePaths } = await dialog.showOpenDialog({
                 properties: ['openFile'],
                 filters: [{ name: 'Text Files', extensions: ['txt'] }]
             });
+            console.log('2. Nach Dateiauswahl:', filePaths);
 
             if (filePaths && filePaths.length > 0) {
                 const txtPath = filePaths[0];
-                const text = await fs.readFile(txtPath, 'utf-8');
-                const txtName = txtPath.split('/').pop().replace('.txt', '');
-                const mp3Path = `/media/andre/Daten/Projekt Himmelsfeuer/Audio/${txtName}.mp3`;
+                console.log('3. Gewählter Textpfad:', txtPath);
+                const text = await fsPromises.readFile(txtPath, 'utf-8');
+                console.log('4. Text gelesen, Länge:', text.length);
+                
+                // Speicherort wählen
+                const { filePath: mp3Path } = await dialog.showSaveDialog({
+                    title: 'MP3 speichern unter',
+                    defaultPath: txtPath.replace('.txt', '.mp3'),
+                    filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
+                });
+                console.log('5. Gewählter MP3-Pfad:', mp3Path);
+
+                if (!mp3Path) {
+                    console.log('6a. Kein MP3-Pfad gewählt, Abbruch');
+                    return;
+                }
+                
+                console.log('6b. Sende txt2mp3 Event mit:', { text: text.substring(0, 50) + '...', mp3Path });
                 ipcRenderer.send('txt2mp3', text, mp3Path);
             }
         } catch (error) {
@@ -139,6 +192,13 @@ const electronAPI = {
         ipcRenderer.on('progress-update', (event, progress, totalBlocks, currentBlock, blockProgress) => {
             console.log('Progress Update:', { progress, totalBlocks, currentBlock, blockProgress });
             callback(progress, totalBlocks, currentBlock, blockProgress);
+        });
+    },
+    onSaveComplete: (callback) => {
+        console.log('Registriere Save-Complete Handler');
+        ipcRenderer.on('save-complete', (event, message) => {
+            console.log('Save Complete:', message);
+            callback(message);
         });
     },
     onError: (callback) => ipcRenderer.on('error', (event, message) => callback(message))
@@ -266,37 +326,28 @@ contextBridge.exposeInMainWorld('mediaPlayer', {
 });
 
 // Hilfsfunktionen
-let timeTracker = null;
+let progressRAF = null;
 
-function createTimeTracker(url) {
-    // Cleanup vorheriger Tracker
-    if (timeTracker) {
-        timeTracker.pause();
-        timeTracker.remove();
-    }
+function updateProgress() {
+    if (currentSound && currentSound.playing() && currentIndex >= 0) {
+        const currentTime = currentSound.seek() || 0;
+        const duration = currentSound.duration() || 0;
 
-    // Erstelle einen versteckten Audio-Player
-    timeTracker = new Audio();
-    timeTracker.style.display = 'none';
-    timeTracker.src = url;
-
-    // Event-Listener für Zeitaktualisierung
-    timeTracker.addEventListener('timeupdate', () => {
-        if (currentSound && currentSound.playing() && currentIndex >= 0) {
-            const track = playlist[currentIndex];
-            const currentTime = timeTracker.currentTime;
-            const duration = timeTracker.duration;
+        if (duration > 0) {
+            // Sende Audio-Progress Event
+            ipcRenderer.send('audio-progress', currentTime, duration);
 
             // Berechne den Fortschritt
             const progress = (currentTime / duration) * 100;
-            document.getElementById('progress-bar').style.width = `${progress}%`;
-
-            // Sende aktuelle Position und Dauer
-            ipcRenderer.send('audio-progress', currentTime, duration);
+            const progressBar = document.getElementById('audio-progress-bar');
+            
+            // Aktualisiere den Fortschrittsbalken
+            progressBar.style.width = `${progress}%`;
         }
-    });
+    }
 
-    return timeTracker;
+    // Nächstes Frame anfordern
+    progressRAF = requestAnimationFrame(updateProgress);
 }
 
 function updatePlayButton() {
@@ -516,41 +567,30 @@ function playTrack(index) {
             isPlaying = true;
             updatePlayButton();
             
-            // Starte den Zeittracker
-            const track = playlist[currentIndex];
-            if (track) {
-                const tracker = createTimeTracker(track.url);
-                tracker.currentTime = currentSound.seek() || 0;
-                tracker.play();
-            }
+            // Starte die Fortschrittsanzeige
+            cancelAnimationFrame(progressRAF);
+            progressRAF = requestAnimationFrame(updateProgress);
         },
         onpause: () => {
             isPlaying = false;
             updatePlayButton();
-            // Pausiere den Zeittracker
-            if (timeTracker) {
-                timeTracker.pause();
-            }
+            // Stoppe die Fortschrittsanzeige
+            cancelAnimationFrame(progressRAF);
         },
         onstop: () => {
             isPlaying = false;
             updatePlayButton();
             
-            // Stoppe den Zeittracker
-            if (timeTracker) {
-                timeTracker.pause();
-                timeTracker.currentTime = 0;
-            }
+            // Stoppe die Fortschrittsanzeige
+            cancelAnimationFrame(progressRAF);
             
             // Setze Progress zurück
             ipcRenderer.send('audio-progress', 0, 0);
+            document.getElementById('audio-progress-bar').style.width = '0%';
         },
         onend: () => {
-            // Stoppe den Zeittracker
-            if (timeTracker) {
-                timeTracker.pause();
-                timeTracker.currentTime = 0;
-            }
+            // Stoppe die Fortschrittsanzeige
+            cancelAnimationFrame(progressRAF);
             
             if (currentIndex < playlist.length - 1) {
                 playTrack(currentIndex + 1);
@@ -559,6 +599,7 @@ function playTrack(index) {
                 updatePlayButton();
                 // Setze Progress zurück
                 ipcRenderer.send('audio-progress', 0, 0);
+                document.getElementById('audio-progress-bar').style.width = '0%';
             }
         }
     });

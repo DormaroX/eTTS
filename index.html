@@ -215,6 +215,28 @@
             min-width: 45px;
         }
 
+        #audio-progress-container {
+            flex: 1;
+            height: 6px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+            position: relative;
+            cursor: pointer;
+            overflow: hidden;
+        }
+
+        #audio-progress-bar {
+            height: 100%;
+            width: 0%;
+            background-color: #1db954;
+            border-radius: 3px;
+            transition: width 0.25s linear;
+            position: absolute;
+            top: 0;
+            left: 0;
+            will-change: width;
+        }
+
         #progress-container {
             margin: 10px auto;
             width: calc(100% - 40px);
@@ -493,16 +515,8 @@
             height: 80px;
             border-radius: 50%;
             object-fit: cover;
-            object-position: center center;
             margin-bottom: 8px;
             border: 2px solid rgba(255, 255, 255, 0.2);
-        }
-
-        /* Spezifische Positionierung für Terra, Nova und Nyxari */
-        .character-card[data-character="Terra|Sage"] img,
-        .character-card[data-character="Nova|Nova"] img,
-        .character-card[data-character="Nyxari|Coral"] img {
-            object-position: center top;
         }
 
         .character-card .name {
@@ -533,12 +547,12 @@
                     <button class="player-button" id="prev">⏮</button>
                     <button class="player-button" id="stop">⏹</button>
                     <button class="player-button" id="play">▶</button>
-                    <button class="player-button" id="next">⏭</button>
+                     <button class="player-button" id="next">⏭</button>
                 </div>
                 <div class="time-progress">
                     <span class="time current">00:00</span>
-                    <div class="progress-container" id="progress-container">
-                        <div class="progress-bar" id="progress-bar"></div>
+                    <div class="progress-container" id="audio-progress-container">
+                        <div class="progress-bar" id="audio-progress-bar"></div>
                     </div>
                     <span class="time total">00:00</span>
                 </div>
@@ -571,7 +585,7 @@
                         <option value="2k">2K Upscaling</option>
                         <option value="4k">4K Upscaling</option>
                     </select>
-                    <button id="txt2mp4-btn" style="background-color: #4444ff;">txt2mp4</button>
+                    <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
                 </div>
 
             <div class="character-carousel">
@@ -739,6 +753,19 @@
         // Stop Button Event Listener
         document.getElementById('stop-btn').addEventListener('click', () => {
             window.electronAPI.stopProcess();
+        });
+
+        // Save Complete Handler
+        window.electronAPI.onSaveComplete((message) => {
+            // Zeige Erfolgsmeldung
+            document.getElementById('progress-text').textContent = message;
+            // Setze Fortschrittsbalken zurück
+            document.getElementById('progress-bar').style.width = "0%";
+            document.getElementById('block-progress-bar').style.width = "0%";
+            document.getElementById('total-progress-bar').style.width = "0%";
+            document.getElementById('block-progress-bar').classList.remove('active');
+            document.getElementById('block-progress-text').textContent = 'Kein Block in Bearbeitung';
+            document.getElementById('total-progress-text').textContent = 'Gesamtfortschritt: 0%';
         });
 
         // Progress Update Handler

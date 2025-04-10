@@ -1,4 +1,4 @@
-# eTTS v1.3
+# eTTS v1.4
 
 Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTalker.
 
@@ -19,6 +19,13 @@ Eine Electron-basierte Text-to-Speech-Anwendung mit Videogenerierung durch SadTa
 - Verbesserte Fortschrittsanzeigen für Verarbeitungsprozesse
 - Korrekte Anzeige von Audiodauern (inkl. Stunden)
 - Optimierte UI-Layouts für verschiedene Fenstergrößen
+- Verbesserte Audio-Verarbeitungslogik:
+  - Klare Trennung zwischen Textfeld-MP3 und Datei-MP3
+  - Optimierte Block-Verarbeitung für lange Texte
+  - Konsistente Fehlerbehandlung
+  - Flüssigere Fortschrittsbalken-Animation
+  - Verbesserte Audiowiedergabe ohne Hall-Effekt
+  - Optimierte Zeitanzeige für die Wiedergabe
 
 ## Voraussetzungen
 
@@ -99,11 +106,6 @@ OPENAI_API_KEY=ihr_api_schlüssel  # Optional für erweiterte Funktionen
 SADTALKER_PATH=/pfad/zu/sadtalker  # Pfad zu Ihrer SadTalker-Installation
 ```
 
-3. Weitere Konfigurationsoptionen finden Sie in:
-- `config.js` - Allgemeine Anwendungseinstellungen
-- `src/config/characters.js` - Charakterkonfiguration
-- `src/config/audio.js` - Audioeinstellungen
-
 ## Fehlerbehebung
 
 ### Bekannte Probleme
@@ -162,3 +164,9 @@ Bei Problemen oder Fragen:
 - [SadTalker](https://github.com/OpenTalker/SadTalker) für die Videogenerierung
 - [Electron](https://www.electronjs.org/) für das Framework
 - Allen Mitwirkenden und der Community
+
+
+## Known issues.
+
+1. txt2mp3-button fehlfunktion. txt wird nicht umgewandelt. Der Prozess scheint nicht zu starten
+2. txt2mp3-blocks-button fehlfunktion. txt wird nicht umgewandelt und/oder mp3 werden nicht in blöcken ausgegeben. Der Prozess scheint nicht zu starten
