@@ -60,7 +60,7 @@ npm install
 
 3. SadTalker einrichten (falls nicht vorhanden):
 ```bash
-cd /home/aov
+cd /home/user
 git clone https://github.com/OpenTalker/SadTalker.git
 cd SadTalker
 bash scripts/download_models.sh
@@ -164,9 +164,3 @@ Bei Problemen oder Fragen:
 - [SadTalker](https://github.com/OpenTalker/SadTalker) für die Videogenerierung
 - [Electron](https://www.electronjs.org/) für das Framework
 - Allen Mitwirkenden und der Community
-
-
-## Known issues.
-
-1. txt2mp3-button fehlfunktion. txt wird nicht umgewandelt. Der Prozess scheint nicht zu starten
-2. txt2mp3-blocks-button fehlfunktion. txt wird nicht umgewandelt und/oder mp3 werden nicht in blöcken ausgegeben. Der Prozess scheint nicht zu starten
