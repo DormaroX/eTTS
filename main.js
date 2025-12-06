@@ -522,7 +522,11 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
         
         // 1. Generiere Audio mit der entsprechenden Stimme
         console.log('Starte Audio-Generierung...');
-        const avatarInfo = AVATAR_VOICE_MAP[avatar.split('|')[0]];
+        const avatarName = avatar ? avatar.split('|')[0].trim() : 'Nova';
+        const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+        if (!avatarInfo) {
+            throw new Error(`Ungültiger Avatar: ${avatarName}`);
+        }
         console.log('Avatar Info:', avatarInfo);
         
         let audioResponse;
@@ -578,7 +582,8 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
         event.sender.send('progress-update', 50, 0, 0, 0);
 
         // 3. Generiere Video mit SadTalker
-        await generateVideo(tempWavPath, avatar.split('|')[0], quality, upscale);
+        const avatarName = avatar ? avatar.split('|')[0].trim() : 'Nova';
+        await generateVideo(tempWavPath, avatarName, quality, upscale);
         // Lösche WAV
         await fsPromises.unlink(tempWavPath);
 
