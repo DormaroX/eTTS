@@ -720,3 +720,103 @@ ipcMain.on('txt2mp3-request', async (event) => {
     }
 });
 
+// "txt2mp3 blocks" - Öffnet Dialog zum Hochladen einer TXT-Datei und konvertiert sie mit Blockverarbeitung zu MP3
+ipcMain.on('upload-txt-file-request', async (event) => {
+    try {
+        // Zeige Open-Dialog für TXT-Datei
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'TXT-Datei auswählen',
+            defaultPath: app.getPath('documents'),
+            filters: [
+                { name: 'Text-Dateien', extensions: ['txt'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+
+        if (result.cancelled || result.filePaths.length === 0) {
+            return;
+        }
+
+        const inputFile = result.filePaths[0];
+        
+        // Lese die TXT-Datei
+        const text = await fsPromises.readFile(inputFile, 'utf-8');
+        
+        if (!text.trim()) {
+            event.sender.send('error', 'Die TXT-Datei ist leer.');
+            return;
+        }
+
+        // Zeige Save-Dialog für Output-MP3
+        const saveResult = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: path.join(app.getPath('downloads'), `${path.basename(inputFile, '.txt')}_blocks.mp3`),
+            filters: [
+                { name: 'MP3-Dateien', extensions: ['mp3'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ]
+        });
+
+        if (saveResult.cancelled) {
+            return;
+        }
+
+        const outputPath = saveResult.filePath;
+
+        // Zerlege Text in Blöcke
+        const chunks = splitTextIntoChunks(text, MAX_CHARS);
+        const totalBlocks = chunks.length;
+        
+        // Array für MP3-Buffer
+        const audioBuffers = [];
+
+        // Verarbeite jeden Block
+        for (let i = 0; i < chunks.length; i++) {
+            if (stopRequested) {
+                event.sender.send('error', 'Prozess unterbrochen.');
+                return;
+            }
+
+            const chunk = chunks[i];
+            const currentBlock = i + 1;
+
+            // Sende Fortschritts-Update
+            event.sender.send('progress-update', 0, totalBlocks, currentBlock, 0);
+
+            try {
+                // Generiere Audio mit OpenAI TTS (tts-1-hd für höhere Qualität)
+                const mp3 = await openai.audio.speech.create({
+                    model: "tts-1-hd",
+                    voice: "alloy",
+                    input: chunk,
+                    response_format: "mp3"
+                });
+
+                const buffer = Buffer.from(await mp3.arrayBuffer());
+                audioBuffers.push(buffer);
+
+                // Sende Fortschritts-Update (100% für diesen Block)
+                event.sender.send('progress-update', Math.round((currentBlock / totalBlocks) * 100), totalBlocks, currentBlock, 100);
+
+            } catch (blockError) {
+                console.error(`Fehler beim Verarbeiten von Block ${currentBlock}:`, blockError);
+                event.sender.send('error', `Fehler bei Block ${currentBlock}: ${blockError.message}`);
+                return;
+            }
+        }
+
+        // Kombiniere alle Audio-Buffer zu einer Datei
+        const combinedBuffer = Buffer.concat(audioBuffers);
+        await fsPromises.writeFile(outputPath, combinedBuffer);
+
+        // Setze Fortschritt zurück
+        event.sender.send('progress-update', 0, 0, 0, 0);
+        event.sender.send('save-complete', `TXT (${totalBlocks} Blöcke) erfolgreich konvertiert: ${path.basename(outputPath)}`);
+        console.log(`TXT mit Blockverarbeitung zu MP3 konvertiert: ${outputPath} (${totalBlocks} Blöcke)`);
+
+    } catch (error) {
+        console.error('Fehler bei TXT zu MP3 Blockverarbeitung:', error);
+        event.sender.send('error', `Fehler bei der Blockverarbeitung: ${error.message}`);
+    }
+});
+
