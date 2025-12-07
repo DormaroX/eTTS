@@ -1,7 +1,4 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
-const fs = require('fs');
-const fsPromises = fs.promises;
-const path = require('path');
 
 // Globale Variablen für die Playlist-Funktionalität
 let playlist = [];
