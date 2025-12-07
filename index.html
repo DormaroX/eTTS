@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'">
     <title>eTTS by dormarox</title>
     <style>
         * {
@@ -617,21 +618,59 @@
             text-overflow: ellipsis;
             padding: 0 5px;
         }
+
+        .panel-section-top {
+            padding-top: 0.7rem;
+        }
+
+        .panel-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .add-button {
+            width: 40px !important;
+            height: 40px;
+            font-size: 24px;
+            font-weight: bold;
+            padding: 0;
+            margin: 0;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+        }
+
+        .player-section {
+            margin-top: auto;
+            margin-bottom: 0;
+        }
+
+        .button-style-save {
+            background-color: #4444ff;
+        }
+
+        .button-style-red {
+            background-color: #ff4444;
+        }
     </style>
 </head>
 <body>
     <div class="left-panel">
-        <div class="panel-section" style="padding-top: 0.7rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+        <div class="panel-section panel-section-top">
+            <div class="panel-header">
                 <h2>Wiedergabeliste</h2>
-                <button class="panel-section button" id="add-files-button" title="Dateien hinzufügen" style="width: 40px !important; height: 40px; font-size: 24px; font-weight: bold; padding: 0; margin: 0; border-radius: 4px !important; display: flex; align-items: center; justify-content: center; line-height: 1;">+</button>
+                <button class="panel-section button add-button" id="add-files-button" title="Dateien hinzufügen">+</button>
             </div>
             <div id="playlist-items" class="playlist-items">
                 <!-- Playlist-Einträge werden hier dynamisch eingefügt -->
             </div>
             <div id="total-time" class="total-time">Gesamtzeit: 00:00</div>
             </div>
-            <div class="panel-section" style="margin-top: auto; margin-bottom: 0;">
+            <div class="panel-section player-section">
                 <div class="now-playing">
                     <span id="current-track">Kein Titel ausgewählt</span>
                 </div>
@@ -657,13 +696,13 @@
 
         <div class="content-wrapper">
             <div class="controls">
-                <textarea id="text-input" placeholder="Gib deinen Text hier ein..." style="margin-bottom: 10px;"></textarea>
+                <textarea id="text-input" placeholder="Gib deinen Text hier ein..."></textarea>
                 <div class="button-row">
                     <button id="listen-btn">Anhören</button>
                     <button id="save-btn">Als MP3 speichern</button>
                     <button id="txt2mp3-btn">txt2mp3</button>
                     <button id="upload-btn">txt2mp3 blocks</button>
-                    <button id="stop-btn" style="background-color: #ff4444;">Stop!</button>
+                    <button id="stop-btn" class="button-style-red">Stop!</button>
             </div>
                 <div class="button-row">
 
@@ -677,7 +716,7 @@
                         <option value="2k">2K Upscaling</option>
                         <option value="4k">4K Upscaling</option>
                     </select>
-                    <button id="txt2mp4-btn" style="background-color: #4444ff;">TXT zu MP4</button>
+                    <button id="txt2mp4-btn" class="button-style-save">TXT zu MP4</button>
                 </div>
 
             <div class="carousel-wrapper">
