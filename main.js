@@ -602,3 +602,54 @@ ipcMain.on('txt2mp3', async (event, text, outputPath) => {
         }
     }
 });
+
+// "Als MP3 speichern" - Speichert TTS-generierte Audio als MP3-Datei
+ipcMain.on('save-text-request', async (event, data) => {
+    try {
+        if (!data || !data.text || data.text.trim() === '') {
+            event.sender.send('error', 'Bitte gebe einen Text ein.');
+            return;
+        }
+
+        const avatarName = data.avatar.split('|')[0].trim();
+        const avatarInfo = AVATAR_VOICE_MAP[avatarName];
+        if (!avatarInfo) {
+            throw new Error(`Ungültiger Avatar: ${avatarName}`);
+        }
+
+        // Zeige Save-Dialog
+        const result = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: path.join(app.getPath('downloads'), `${avatarName}_${Date.now()}.mp3`),
+            filters: [
+                { name: 'MP3-Dateien', extensions: ['mp3'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ]
+        });
+
+        if (result.cancelled) {
+            return;
+        }
+
+        const outputPath = result.filePath;
+
+        // Generiere Audio mit OpenAI TTS
+        const mp3 = await openai.audio.speech.create({
+            model: "tts-1-hd",
+            voice: avatarInfo.voice,
+            input: data.text,
+            response_format: "mp3"
+        });
+
+        // Speichere die MP3-Datei
+        const buffer = Buffer.from(await mp3.arrayBuffer());
+        await fsPromises.writeFile(outputPath, buffer);
+
+        event.sender.send('save-complete', `MP3 erfolgreich gespeichert: ${path.basename(outputPath)}`);
+        console.log(`MP3 gespeichert: ${outputPath}`);
+
+    } catch (error) {
+        console.error('Fehler beim Speichern der MP3:', error);
+        event.sender.send('error', `Fehler beim Speichern: ${error.message}`);
+    }
+});
+
