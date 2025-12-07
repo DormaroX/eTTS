@@ -1,10 +1,7 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
-const { Howl, Howler } = require('howler');
-const { dialog } = require('@electron/remote');
 const fs = require('fs');
 const fsPromises = fs.promises;
 const path = require('path');
-const mp3Duration = require('mp3-duration');
 
 // Globale Variablen für die Playlist-Funktionalität
 let playlist = [];
@@ -24,64 +21,9 @@ const electronAPI = {
             callback(currentTime, duration);
         });
     },
-    openMusicFolder: async () => {
-        try {
-            const { filePaths } = await dialog.showOpenDialog({
-                properties: ['openFile', 'multiSelections'],
-                filters: [{ name: 'Audio Files', extensions: ['mp3', 'wav', 'ogg'] }]
-            });
-
-            if (filePaths && filePaths.length > 0) {
-                for (const filePath of filePaths) {
-                    try {
-                        const fileName = path.basename(filePath);
-                        console.log('Lade Audio-Datei:', fileName);
-                        
-                        // Lese die Datei
-                        const buffer = await fsPromises.readFile(filePath);
-                        
-                        // Ermittle die Dauer
-                        const duration = await new Promise((resolve, reject) => {
-                            mp3Duration(buffer, (err, durationValue) => {
-                                if (err) {
-                                    console.error('Fehler bei mp3-duration:', err);
-                                    reject(err);
-                                    return;
-                                }
-                                
-                                if (durationValue === undefined || typeof durationValue !== 'number') {
-                                    console.error('Dauer ist undefined oder kein number!');
-                                    reject(new Error(`Ungültige Dauer: ${durationValue}`));
-                                    return;
-                                }
-                                
-                                resolve(durationValue);
-                            });
-                        });
-                        
-                        // Erstelle das Track-Objekt
-                        const track = {
-                            name: fileName,
-                            url: filePath,  // Lokale Datei, verwende den Pfad direkt
-                            duration: duration
-                        };
-                        
-                        console.log('Track hinzugefügt:', {
-                            name: track.name,
-                            duration: track.duration,
-                            durationType: typeof track.duration
-                        });
-                        
-                        playlist.push(track);
-                    } catch (error) {
-                        console.error('Fehler beim Laden von', filePath, ':', error);
-                    }
-                }
-                updatePlaylistUI();
-            }
-        } catch (error) {
-            console.error('Error selecting files:', error);
-        }
+    openMusicFolder: () => {
+        // Sende Request an Main Process für Dialog
+        ipcRenderer.send('open-music-folder');
     },
     stopProcess: () => ipcRenderer.send('stop-process'),
     sendText: (data) => {
@@ -97,95 +39,17 @@ const electronAPI = {
             console.error('Fehler beim Senden:', error);
         }
     },
-    saveText: async (data) => {
-        try {
-            const { filePath } = await dialog.showSaveDialog({
-                title: 'MP3 speichern unter',
-                defaultPath: `tts_${new Date().toISOString().replace(/[:.]/g, '-')}.mp3`,
-                filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
-            });
-
-            if (!filePath) {
-                console.log('Keine Datei ausgewählt');
-                return;
-            }
-
-            ipcRenderer.send('tts-save', data.text, filePath, data.avatar);
-        } catch (error) {
-            console.error('Fehler beim Speichern:', error);
-        }
+    saveText: (data) => {
+        // Sende Request an Main Process für Save Dialog
+        ipcRenderer.send('save-text-request', data);
     },
-    uploadTxtFile: async () => {
-        console.log('1. txt2mp3-blocks function called');
-        try {
-            const { filePaths } = await dialog.showOpenDialog({
-                properties: ['openFile'],
-                filters: [{ name: 'Text Files', extensions: ['txt'] }]
-            });
-            console.log('2. Nach Dateiauswahl:', filePaths);
-
-            if (filePaths && filePaths.length > 0) {
-                const txtPath = filePaths[0];
-                console.log('3. Gewählter Textpfad:', txtPath);
-                const text = await fsPromises.readFile(txtPath, 'utf-8');
-                console.log('4. Text gelesen, Länge:', text.length);
-                
-                // Speicherort wählen
-                const { filePath: mp3Path } = await dialog.showSaveDialog({
-                    title: 'MP3 speichern unter',
-                    defaultPath: txtPath.replace('.txt', '.mp3'),
-                    filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
-                });
-                console.log('5. Gewählter MP3-Pfad:', mp3Path);
-
-                if (!mp3Path) {
-                    console.log('6a. Kein MP3-Pfad gewählt, Abbruch');
-                    return;
-                }
-                
-                // Hole den aktuell ausgewählten Avatar
-                const selectedAvatar = document.querySelector('input[name="character"]:checked')?.value || 'Nova|Nova';
-                console.log('6b. Sende upload-txt-file Event mit:', { text: text.substring(0, 50) + '...', mp3Path, avatar: selectedAvatar });
-                ipcRenderer.send('upload-txt-file', text, mp3Path, selectedAvatar);
-            }
-        } catch (error) {
-            console.error('Fehler beim Lesen der Datei:', error);
-        }
+    uploadTxtFile: () => {
+        // Sende Request an Main Process für Upload Dialog
+        ipcRenderer.send('upload-txt-file-request');
     },
-    txt2mp3: async () => {
-        console.log('1. txt2mp3 function called');
-        try {
-            const { filePaths } = await dialog.showOpenDialog({
-                properties: ['openFile'],
-                filters: [{ name: 'Text Files', extensions: ['txt'] }]
-            });
-            console.log('2. Nach Dateiauswahl:', filePaths);
-
-            if (filePaths && filePaths.length > 0) {
-                const txtPath = filePaths[0];
-                console.log('3. Gewählter Textpfad:', txtPath);
-                const text = await fsPromises.readFile(txtPath, 'utf-8');
-                console.log('4. Text gelesen, Länge:', text.length);
-                
-                // Speicherort wählen
-                const { filePath: mp3Path } = await dialog.showSaveDialog({
-                    title: 'MP3 speichern unter',
-                    defaultPath: txtPath.replace('.txt', '.mp3'),
-                    filters: [{ name: 'MP3 Files', extensions: ['mp3'] }]
-                });
-                console.log('5. Gewählter MP3-Pfad:', mp3Path);
-
-                if (!mp3Path) {
-                    console.log('6a. Kein MP3-Pfad gewählt, Abbruch');
-                    return;
-                }
-                
-                console.log('6b. Sende txt2mp3 Event mit:', { text: text.substring(0, 50) + '...', mp3Path });
-                ipcRenderer.send('txt2mp3', text, mp3Path);
-            }
-        } catch (error) {
-            console.error('Fehler beim Lesen der Datei:', error);
-        }
+    txt2mp3: () => {
+        // Sende Request an Main Process für txt2mp3 Dialog
+        ipcRenderer.send('txt2mp3-request');
     },
     onProgressUpdate: (callback) => {
         console.log('Registriere Progress-Update Handler');

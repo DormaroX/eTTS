@@ -745,6 +745,9 @@
     </div>
 
     <script>
+        // INIT: Deklariere Global Variables ZUERST
+        let selectedCharacter = 'Maxx|ash';  // Standard-Charakter
+        
         // History aktualisieren
         function updateHistory(history) {
             const container = document.getElementById('history-container');
@@ -1084,7 +1087,6 @@
 
         // Character Carousel
         const characterCards = document.querySelectorAll('.character-card');
-        let selectedCharacter = 'Maxx|ash';  // Standard-Charakter
 
         // Initialisiere den aktiven Charakter
         const updateActiveCharacter = () => {
