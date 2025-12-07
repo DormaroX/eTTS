@@ -1,0 +1,4 @@
+# Sandbox wird nicht versioniert
+etts-test/
+*.log
+.env.local

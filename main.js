@@ -18,7 +18,6 @@ if (!fs.existsSync(envPath)) {
 // Lade Umgebungsvariablen
 dotenv.config({ path: envPath });
 const { OpenAI } = require('openai');
-require('@electron/remote/main').initialize();
 const { writeToTTS } = require('./tts-output');
 
 // Pfade für SadTalker
@@ -70,9 +69,8 @@ function createWindow() {
         fullscreen: true,
         icon: path.join(iconPath, process.platform === 'linux' ? 'icon-64.png' : 'icon.png'),
         webPreferences: {
-            nodeIntegration: true,
+            nodeIntegration: false,
             contextIsolation: true,
-            enableRemoteModule: true,
             webSecurity: true,
             allowRunningInsecureContent: false,
             preload: path.join(__dirname, 'preload.js'),
@@ -80,8 +78,6 @@ function createWindow() {
         },
         title: 'eTTS by dormarox',
     });
-
-    require('@electron/remote/main').enable(mainWindow.webContents);
 
     // Aktiviere die Tastenkombination für DevTools
     globalShortcut.register('CommandOrControl+Shift+I', () => {
