@@ -656,3 +656,67 @@ ipcMain.on('save-text-request', async (event, data) => {
     }
 });
 
+// "txt2mp3" - Öffnet Dialog zum Hochladen einer TXT-Datei und konvertiert sie zu MP3
+ipcMain.on('txt2mp3-request', async (event) => {
+    try {
+        // Zeige Open-Dialog für TXT-Datei
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'TXT-Datei auswählen',
+            defaultPath: app.getPath('documents'),
+            filters: [
+                { name: 'Text-Dateien', extensions: ['txt'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+
+        if (result.cancelled || result.filePaths.length === 0) {
+            return;
+        }
+
+        const inputFile = result.filePaths[0];
+        
+        // Lese die TXT-Datei
+        const text = await fsPromises.readFile(inputFile, 'utf-8');
+        
+        if (!text.trim()) {
+            event.sender.send('error', 'Die TXT-Datei ist leer.');
+            return;
+        }
+
+        // Zeige Save-Dialog für Output-MP3
+        const saveResult = await dialog.showSaveDialog(mainWindow, {
+            defaultPath: path.join(app.getPath('downloads'), `${path.basename(inputFile, '.txt')}.mp3`),
+            filters: [
+                { name: 'MP3-Dateien', extensions: ['mp3'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ]
+        });
+
+        if (saveResult.cancelled) {
+            return;
+        }
+
+        const outputPath = saveResult.filePath;
+
+        // Generiere Audio mit OpenAI TTS (benutze standard tts-1 Model für txt2mp3)
+        const mp3 = await openai.audio.speech.create({
+            model: "tts-1",
+            voice: "alloy",
+            input: text,
+            response_format: "mp3"
+        });
+
+        // Speichere die MP3-Datei
+        const buffer = Buffer.from(await mp3.arrayBuffer());
+        await fsPromises.writeFile(outputPath, buffer);
+
+        event.sender.send('save-complete', `TXT erfolgreich zu MP3 konvertiert: ${path.basename(outputPath)}`);
+        console.log(`TXT zu MP3 konvertiert: ${outputPath}`);
+
+    } catch (error) {
+        console.error('Fehler bei TXT zu MP3 Konvertierung:', error);
+        event.sender.send('error', `Fehler bei der Konvertierung: ${error.message}`);
+    }
+});
+
