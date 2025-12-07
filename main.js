@@ -25,12 +25,52 @@ const SADTALKER_PATH = '/home/aov/SadTalker';
 const IMAGES_PATH = path.join(__dirname, 'assets', 'images');
 const VIDEO_PATH = path.join(app.getPath('videos'), 'eTTS-Export');
 
-// Avatar zu Stimmen-Mapping
+// Character-Konfiguration importieren
+const { CharacterConfig } = require('./character-config');
+
+// Avatar zu Stimmen-Mapping (kompatibel mit bestehendem Code)
+// Wird aus CharacterConfig generiert
 const AVATAR_VOICE_MAP = {
-    'Maxx': { voice: 'ash', image: 'maxx.png' },
-    'Terra': { voice: 'sage', image: 'terra.png' },
-    'Nova': { voice: 'nova', image: 'nova.png' },
-    'Nyxari': { voice: 'coral', image: 'nyxari.png' }
+    'Maxx': { 
+        voice: CharacterConfig.getCharacter('Maxx').voice, 
+        image: 'maxx.png',
+        settings: CharacterConfig.getCharacter('Maxx')
+    },
+    'Terra': { 
+        voice: CharacterConfig.getCharacter('Terra').voice, 
+        image: 'terra.png',
+        settings: CharacterConfig.getCharacter('Terra')
+    },
+    'Nova': { 
+        voice: CharacterConfig.getCharacter('Nova').voice, 
+        image: 'nova.png',
+        settings: CharacterConfig.getCharacter('Nova')
+    },
+    'Nyxari': { 
+        voice: CharacterConfig.getCharacter('Nyxari').voice, 
+        image: 'nyxari.png',
+        settings: CharacterConfig.getCharacter('Nyxari')
+    },
+    'Aurora': { 
+        voice: CharacterConfig.getCharacter('Aurora').voice, 
+        image: null, // Noch kein Bild
+        settings: CharacterConfig.getCharacter('Aurora')
+    },
+    'Admiral Bishop': { 
+        voice: CharacterConfig.getCharacter('Admiral Bishop').voice, 
+        image: null, // Noch kein Bild
+        settings: CharacterConfig.getCharacter('Admiral Bishop')
+    },
+    'Commander Cook': { 
+        voice: CharacterConfig.getCharacter('Commander Cook').voice, 
+        image: null, // Noch kein Bild
+        settings: CharacterConfig.getCharacter('Commander Cook')
+    },
+    'Narrator': { 
+        voice: CharacterConfig.getCharacter('Narrator').voice, 
+        image: null, // Noch kein Bild
+        settings: CharacterConfig.getCharacter('Narrator')
+    }
 };
 
 // Globale Variable für den Stopp-Status
@@ -45,6 +85,30 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 // Maximale Zeichenlänge pro OpenAI-Anfrage
 const MAX_CHARS = 4095;
 
+/**
+ * Erstellt einen Text mit Character-Instructions für TTS
+ * @param {string} text - Der ursprüngliche Text
+ * @param {string} avatarName - Name des Charakters
+ * @param {boolean} includeInstructions - Ob Instructions eingefügt werden sollen (optional, default: false)
+ * @returns {string} Text mit optionalen Character-Instructions
+ */
+function prepareTextWithCharacterInstructions(text, avatarName, includeInstructions = false) {
+    if (!includeInstructions) {
+        return text;
+    }
+    
+    const character = CharacterConfig.getCharacter(avatarName);
+    if (!character) {
+        console.warn(`Character ${avatarName} nicht gefunden, verwende Text ohne Instructions`);
+        return text;
+    }
+    
+    // Erstelle einen Prompt mit Character-Instructions
+    // Format: [Character Instructions] Text
+    const instructions = character.getInstructions();
+    return `[Als ${avatarName} sprechen: ${instructions}]\n\n${text}`;
+}
+
 // Funktion, um langen Text in kleinere Blöcke zu zerlegen
 function splitTextIntoChunks(text, maxLength) {
     let chunks = [];
@@ -58,6 +122,372 @@ function splitTextIntoChunks(text, maxLength) {
         text = text.substring(chunk.length).trim();
     }
     return chunks;
+}
+
+/**
+ * Parst Text mit Character-Tags und teilt ihn in Segmente auf
+ * @param {string} text - Text mit [CHARACTER] Tags
+ * @returns {Array} Array von Segmenten: [{character: string, text: string, modifier: string|null}, ...]
+ */
+function parseTextWithTags(text) {
+    const segments = [];
+    const lines = text.split('\n');
+    let currentCharacter = null;
+    let currentModifier = null;
+    let currentText = [];
+    
+    for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        
+        // Prüfe auf Character-Tag: [CHARACTER] oder [CHARACTER:modifier]
+        const tagMatch = line.match(/^\[([A-Z_]+)(?::([^\]]+))?\]\s*$/);
+        
+        if (tagMatch) {
+            // Speichere vorheriges Segment, falls vorhanden
+            if (currentCharacter && currentText.length > 0) {
+                const segmentText = currentText.join('\n').trim();
+                if (segmentText.length > 0) {
+                    segments.push({
+                        character: currentCharacter,
+                        text: segmentText,
+                        modifier: currentModifier
+                    });
+                }
+                currentText = [];
+            }
+            
+            // Setze neuen Character
+            const tagName = tagMatch[1];
+            currentModifier = tagMatch[2] || null;
+            
+            // Mappe Tag-Namen zu Character-Namen
+            const characterMap = {
+                'NARRATOR': 'Narrator',
+                'NYXARI': 'Nyxari',
+                'BISHOP': 'Admiral Bishop',
+                'MAXX': 'Maxx',
+                'TERRA': 'Terra',
+                'NOVA': 'Nova',
+                'AURORA': 'Aurora',
+                'COOK': 'Commander Cook'
+            };
+            
+            currentCharacter = characterMap[tagName] || tagName;
+        } else {
+            // Normale Textzeile - füge zum aktuellen Segment hinzu
+            if (!currentCharacter) {
+                // Wenn kein Character-Tag gefunden wurde, verwende Narrator als Standard
+                currentCharacter = 'Narrator';
+            }
+            currentText.push(line);
+        }
+    }
+    
+    // Füge letztes Segment hinzu
+    if (currentCharacter && currentText.length > 0) {
+        const segmentText = currentText.join('\n').trim();
+        if (segmentText.length > 0) {
+            segments.push({
+                character: currentCharacter,
+                text: segmentText,
+                modifier: currentModifier
+            });
+        }
+    }
+    
+    return segments;
+}
+
+/**
+ * Verarbeitet Text mit Character-Tags und erstellt Multi-Character MP3
+ * @param {event} event - IPC Event
+ * @param {string} text - Text mit Tags
+ * @param {string} outputPath - Ausgabe-Pfad
+ * @param {string} model - TTS Model (tts-1 oder tts-1-hd)
+ * @returns {Promise<void>}
+ */
+async function processMultiCharacterTTS(event, text, outputPath, model = 'tts-1-hd', pauseDuration = 0.6) {
+    // Setze stopRequested zurück
+    stopRequested = false;
+    
+    // Konfigurierbare Pause zwischen Character-Wechseln (in Sekunden)
+    // Standard: 0.6s (empfohlen für natürliche Dialoge)
+    // Optionen: 0.3-0.5s (kurz), 0.5-0.8s (normal), 1.0-1.5s (lang), 2.0s+ (sehr lang)
+    const characterPauseDuration = pauseDuration;
+    
+    const tempDir = path.join(__dirname, 'temp_audio');
+    const tempFiles = [];
+    
+    try {
+        // Erstelle temporäres Verzeichnis
+        if (!fs.existsSync(tempDir)) {
+            await fsPromises.mkdir(tempDir, { recursive: true });
+        }
+        
+        // Prüfe das Ausgabeverzeichnis
+        const outputDir = path.dirname(outputPath);
+        const dirCheck = checkOutputDirectory(outputDir);
+        
+        if (!dirCheck.available) {
+            throw new Error(`Speicherort nicht verfügbar: ${dirCheck.error}`);
+        }
+        
+        // Parse Text mit Tags
+        const segments = parseTextWithTags(text);
+        
+        if (segments.length === 0) {
+            throw new Error('Keine Text-Segmente gefunden. Bitte prüfe die Datei auf Character-Tags.');
+        }
+        
+        console.log(`Gefunden: ${segments.length} Character-Segmente`);
+        segments.forEach((seg, idx) => {
+            console.log(`  Segment ${idx + 1}: ${seg.character} (${seg.text.length} Zeichen)`);
+        });
+        
+        const totalSegments = segments.length;
+        let processedSegments = 0;
+        const segmentFiles = [];
+        
+        // Verarbeite jedes Segment und speichere als temporäre MP3-Datei
+        for (let i = 0; i < segments.length; i++) {
+            if (stopRequested) {
+                console.log('Multi-Character-TTS wurde gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                // Aufräumen
+                await cleanupTempFiles(tempFiles);
+                return;
+            }
+            
+            const segment = segments[i];
+            processedSegments++;
+            
+            // Hole Character-Info
+            const avatarInfo = AVATAR_VOICE_MAP[segment.character];
+            if (!avatarInfo) {
+                console.warn(`Character ${segment.character} nicht gefunden, überspringe Segment`);
+                continue;
+            }
+            
+            const voice = avatarInfo.voice;
+            
+            // Prüfe, ob Voice "none" ist (sollte nicht vorkommen, aber sicherheitshalber)
+            if (voice === 'none') {
+                console.warn(`Character ${segment.character} hat keine Voice, überspringe Segment`);
+                continue;
+            }
+            
+            // Teile Segment-Text in Blöcke auf (falls zu lang)
+            const segmentBlocks = splitTextIntoChunks(segment.text, MAX_CHARS);
+            const totalBlocks = segmentBlocks.length;
+            
+            console.log(`Verarbeite Segment ${processedSegments}/${totalSegments}: ${segment.character} (${totalBlocks} Block(s))`);
+            
+            // Temporäre Datei für dieses Segment
+            const segmentTempFile = path.join(tempDir, `segment_${i}_${Date.now()}.mp3`);
+            tempFiles.push(segmentTempFile);
+            let segmentBuffer = Buffer.alloc(0);
+            
+            // Verarbeite jeden Block des Segments
+            for (let blockIdx = 0; blockIdx < segmentBlocks.length; blockIdx++) {
+                if (stopRequested) {
+                    console.log('Multi-Character-TTS wurde gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    await cleanupTempFiles(tempFiles);
+                    return;
+                }
+                
+                const block = segmentBlocks[blockIdx];
+                const segmentProgress = ((processedSegments - 1) / totalSegments) * 100;
+                const blockProgress = (blockIdx / totalBlocks) * 100;
+                const totalProgress = segmentProgress + (blockProgress / totalSegments);
+                
+                event.sender.send('progress-update', totalProgress, totalSegments, processedSegments, blockProgress);
+                
+                // Prüfe stopRequested vor dem API-Aufruf
+                if (stopRequested) {
+                    console.log('Multi-Character-TTS wurde vor API-Aufruf gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    await cleanupTempFiles(tempFiles);
+                    return;
+                }
+                
+                // Generiere Audio für diesen Block
+                const response = await openai.audio.speech.create({
+                    model: model,
+                    voice: voice,
+                    input: block,
+                    response_format: "mp3"
+                });
+                
+                // Prüfe stopRequested nach dem API-Aufruf
+                if (stopRequested) {
+                    console.log('Multi-Character-TTS wurde nach API-Aufruf gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    await cleanupTempFiles(tempFiles);
+                    return;
+                }
+                
+                const blockBuffer = Buffer.from(await response.arrayBuffer());
+                segmentBuffer = Buffer.concat([segmentBuffer, blockBuffer]);
+            }
+            
+            // Speichere Segment als temporäre MP3-Datei
+            await fsPromises.writeFile(segmentTempFile, segmentBuffer);
+            segmentFiles.push(segmentTempFile);
+            
+            console.log(`Segment ${processedSegments} gespeichert: ${segmentTempFile}`);
+        }
+        
+        // Prüfe stopRequested vor dem Kombinieren
+        if (stopRequested) {
+            console.log('Multi-Character-TTS wurde vor dem Kombinieren gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            await cleanupTempFiles(tempFiles);
+            return;
+        }
+        
+        // Kombiniere alle Segmente mit FFmpeg und füge Pausen zwischen Character-Wechseln ein
+        console.log(`Kombiniere ${segmentFiles.length} Segmente mit FFmpeg (Pause: ${characterPauseDuration}s)...`);
+        event.sender.send('progress-update', 95, totalSegments, totalSegments, 95);
+        
+        await combineAudioSegmentsWithPauses(segmentFiles, segments, outputPath, characterPauseDuration, event);
+        
+        // Aufräumen: Lösche temporäre Dateien
+        await cleanupTempFiles(tempFiles);
+        
+        event.sender.send('progress-update', 100, totalSegments, totalSegments, 100);
+        event.sender.send('save-complete', `Multi-Character MP3 erfolgreich erstellt: ${path.basename(outputPath)}`);
+        console.log(`Multi-Character MP3 gespeichert: ${outputPath}`);
+        
+    } catch (error) {
+        // Aufräumen bei Fehler
+        await cleanupTempFiles(tempFiles);
+        
+        if (stopRequested) {
+            console.log('Multi-Character-TTS wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+        console.error("Fehler bei Multi-Character-TTS:", error);
+        event.sender.send('error', `Fehler bei der Multi-Character-TTS: ${error.message}`);
+        throw error;
+    }
+}
+
+/**
+ * Kombiniert Audio-Segmente mit FFmpeg und fügt Pausen zwischen Character-Wechseln ein
+ */
+async function combineAudioSegmentsWithPauses(segmentFiles, segments, outputPath, pauseDuration, event) {
+    return new Promise(async (resolve, reject) => {
+        if (stopRequested) {
+            reject(new Error('Prozess wurde gestoppt'));
+            return;
+        }
+        
+        const tempDir = path.join(__dirname, 'temp_audio');
+        const silenceFile = path.join(tempDir, `silence_${Date.now()}.mp3`);
+        const concatListFile = path.join(tempDir, `concat_${Date.now()}.txt`);
+        
+        try {
+            // Generiere Stille-Datei mit FFmpeg
+            await new Promise((silenceResolve, silenceReject) => {
+                const generateSilence = exec(`ffmpeg -y -f lavfi -i anullsrc=channel_layout=stereo:sample_rate=24000 -t ${pauseDuration} "${silenceFile}"`);
+                
+                generateSilence.on('close', (code) => {
+                    if (code === 0) {
+                        silenceResolve();
+                    } else {
+                        silenceReject(new Error(`Fehler beim Generieren der Stille: ${code}`));
+                    }
+                });
+                
+                generateSilence.stderr.on('data', () => {
+                    // Ignoriere FFmpeg stderr für Stille-Generierung
+                });
+            });
+            
+            // Erstelle Concat-Liste (einfacher als Filter-Komplex)
+            const concatLines = [];
+            for (let i = 0; i < segmentFiles.length; i++) {
+                // Escape-Pfad für FFmpeg concat-Format
+                const escapedPath = segmentFiles[i].replace(/'/g, "'\\''");
+                concatLines.push(`file '${escapedPath}'`);
+                
+                // Füge Stille hinzu, wenn nächster Character anders ist
+                if (i < segments.length - 1 && segments[i + 1].character !== segments[i].character) {
+                    const escapedSilence = silenceFile.replace(/'/g, "'\\''");
+                    concatLines.push(`file '${escapedSilence}'`);
+                }
+            }
+            
+            // Schreibe Concat-Liste
+            await fsPromises.writeFile(concatListFile, concatLines.join('\n'));
+            
+            // FFmpeg-Befehl zum Kombinieren mit concat demuxer
+            const ffmpegCommand = `ffmpeg -y -f concat -safe 0 -i "${concatListFile}" -c:a libmp3lame -b:a 192k "${outputPath}"`;
+            
+            console.log('FFmpeg-Kombinierung startet...');
+            const combineProcess = exec(ffmpegCommand);
+            
+            combineProcess.stdout.on('data', (data) => {
+                console.log('FFmpeg stdout:', data.toString());
+            });
+            
+            combineProcess.stderr.on('data', (data) => {
+                // FFmpeg schreibt normalerweise nach stderr
+                const output = data.toString();
+                if (output.includes('time=') || output.includes('Duration:')) {
+                    console.log('FFmpeg:', output);
+                }
+            });
+            
+            combineProcess.on('close', async (code) => {
+                // Aufräumen
+                try {
+                    if (fs.existsSync(silenceFile)) await fsPromises.unlink(silenceFile);
+                    if (fs.existsSync(concatListFile)) await fsPromises.unlink(concatListFile);
+                } catch (e) {
+                    console.warn('Fehler beim Aufräumen:', e);
+                }
+                
+                if (stopRequested) {
+                    reject(new Error('Prozess wurde gestoppt'));
+                    return;
+                }
+                
+                if (code === 0) {
+                    console.log('FFmpeg-Kombinierung erfolgreich');
+                    resolve();
+                } else {
+                    console.error('FFmpeg-Fehler:', code);
+                    reject(new Error(`FFmpeg-Fehler beim Kombinieren: ${code}`));
+                }
+            });
+            
+        } catch (error) {
+            // Aufräumen bei Fehler
+            try {
+                if (fs.existsSync(silenceFile)) await fsPromises.unlink(silenceFile);
+                if (fs.existsSync(concatListFile)) await fsPromises.unlink(concatListFile);
+            } catch (e) {}
+            reject(error);
+        }
+    });
+}
+
+/**
+ * Hilfsfunktion zum Aufräumen temporärer Dateien
+ */
+async function cleanupTempFiles(files) {
+    for (const file of files) {
+        try {
+            if (fs.existsSync(file)) {
+                await fsPromises.unlink(file);
+            }
+        } catch (error) {
+            console.warn(`Konnte temporäre Datei nicht löschen: ${file}`, error);
+        }
+    }
 }
 
 
@@ -918,20 +1348,36 @@ ipcMain.on('txt2mp3-request', async (event) => {
 
         const outputPath = saveResult.filePath;
 
-        // Generiere Audio mit OpenAI TTS (benutze standard tts-1 Model für txt2mp3)
-        const mp3 = await openai.audio.speech.create({
-            model: "tts-1",
-            voice: "alloy",
-            input: text,
-            response_format: "mp3"
-        });
+        // Prüfe, ob Text Character-Tags enthält
+        const hasTags = /\[[A-Z_]+\]/.test(text);
+        
+        if (hasTags) {
+            // Verwende Multi-Character-TTS für Dateien mit Tags
+            console.log('Erkannt: Text enthält Character-Tags, verwende Multi-Character-TTS');
+            await processMultiCharacterTTS(event, text, outputPath, 'tts-1');
+        } else {
+            // Verwende Standard-TTS für Dateien ohne Tags
+            console.log('Keine Tags gefunden, verwende Standard-TTS');
+            
+            // Verwende Narrator als Standard-Stimme
+            const narratorInfo = AVATAR_VOICE_MAP['Narrator'];
+            const voice = narratorInfo ? narratorInfo.voice : 'alloy';
+            
+            // Generiere Audio mit OpenAI TTS
+            const mp3 = await openai.audio.speech.create({
+                model: "tts-1",
+                voice: voice,
+                input: text,
+                response_format: "mp3"
+            });
 
-        // Speichere die MP3-Datei
-        const buffer = Buffer.from(await mp3.arrayBuffer());
-        await fsPromises.writeFile(outputPath, buffer);
+            // Speichere die MP3-Datei
+            const buffer = Buffer.from(await mp3.arrayBuffer());
+            await fsPromises.writeFile(outputPath, buffer);
 
-        event.sender.send('save-complete', `TXT erfolgreich zu MP3 konvertiert: ${path.basename(outputPath)}`);
-        console.log(`TXT zu MP3 konvertiert: ${outputPath}`);
+            event.sender.send('save-complete', `TXT erfolgreich zu MP3 konvertiert: ${path.basename(outputPath)}`);
+            console.log(`TXT zu MP3 konvertiert: ${outputPath}`);
+        }
 
     } catch (error) {
         console.error('Fehler bei TXT zu MP3 Konvertierung:', error);
@@ -982,32 +1428,47 @@ ipcMain.on('upload-txt-file-request', async (event) => {
 
         const outputPath = saveResult.filePath;
 
-        // Zerlege Text in Blöcke
-        const chunks = splitTextIntoChunks(text, MAX_CHARS);
-        const totalBlocks = chunks.length;
+        // Prüfe, ob Text Character-Tags enthält
+        const hasTags = /\[[A-Z_]+\]/.test(text);
         
-        // Array für MP3-Buffer
-        const audioBuffers = [];
+        if (hasTags) {
+            // Verwende Multi-Character-TTS für Dateien mit Tags
+            console.log('Erkannt: Text enthält Character-Tags, verwende Multi-Character-TTS');
+            await processMultiCharacterTTS(event, text, outputPath, 'tts-1-hd');
+        } else {
+            // Verwende Standard-Block-Verarbeitung für Dateien ohne Tags
+            console.log('Keine Tags gefunden, verwende Standard-Block-Verarbeitung');
+            
+            // Verwende Narrator als Standard-Stimme
+            const narratorInfo = AVATAR_VOICE_MAP['Narrator'];
+            const voice = narratorInfo ? narratorInfo.voice : 'alloy';
+            
+            // Zerlege Text in Blöcke
+            const chunks = splitTextIntoChunks(text, MAX_CHARS);
+            const totalBlocks = chunks.length;
+            
+            // Array für MP3-Buffer
+            const audioBuffers = [];
 
-        // Setze stopRequested zurück, wenn ein neuer Prozess startet
-        stopRequested = false;
-        
-        // Verarbeite jeden Block
-        for (let i = 0; i < chunks.length; i++) {
-            if (stopRequested) {
-                console.log('upload-txt-file-request wurde gestoppt');
-                event.sender.send('progress-update', 0, 0, 0, 0);
-                event.sender.send('error', 'Prozess unterbrochen.');
-                return;
-            }
+            // Setze stopRequested zurück, wenn ein neuer Prozess startet
+            stopRequested = false;
+            
+            // Verarbeite jeden Block
+            for (let i = 0; i < chunks.length; i++) {
+                if (stopRequested) {
+                    console.log('upload-txt-file-request wurde gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    event.sender.send('error', 'Prozess unterbrochen.');
+                    return;
+                }
 
-            const chunk = chunks[i];
-            const currentBlock = i + 1;
+                const chunk = chunks[i];
+                const currentBlock = i + 1;
 
-            // Sende Fortschritts-Update
-            event.sender.send('progress-update', 0, totalBlocks, currentBlock, 0);
+                // Sende Fortschritts-Update
+                event.sender.send('progress-update', 0, totalBlocks, currentBlock, 0);
 
-            try {
+                try {
                 // Prüfe stopRequested vor dem API-Aufruf
                 if (stopRequested) {
                     console.log('upload-txt-file-request wurde vor API-Aufruf gestoppt');
@@ -1019,7 +1480,7 @@ ipcMain.on('upload-txt-file-request', async (event) => {
                 // Generiere Audio mit OpenAI TTS (tts-1-hd für höhere Qualität)
                 const mp3 = await openai.audio.speech.create({
                     model: "tts-1-hd",
-                    voice: "alloy",
+                    voice: voice,  // Verwende Narrator-Stimme (oder fallback 'alloy')
                     input: chunk,
                     response_format: "mp3"
                 });
@@ -1069,10 +1530,11 @@ ipcMain.on('upload-txt-file-request', async (event) => {
             return;
         }
 
-        // Setze Fortschritt zurück
-        event.sender.send('progress-update', 0, 0, 0, 0);
-        event.sender.send('save-complete', `TXT (${totalBlocks} Blöcke) erfolgreich konvertiert: ${path.basename(outputPath)}`);
-        console.log(`TXT mit Blockverarbeitung zu MP3 konvertiert: ${outputPath} (${totalBlocks} Blöcke)`);
+            // Setze Fortschritt zurück
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            event.sender.send('save-complete', `TXT (${totalBlocks} Blöcke) erfolgreich konvertiert: ${path.basename(outputPath)}`);
+            console.log(`TXT mit Blockverarbeitung zu MP3 konvertiert: ${outputPath} (${totalBlocks} Blöcke)`);
+        }
 
     } catch (error) {
         if (stopRequested) {

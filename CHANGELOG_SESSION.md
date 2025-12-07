@@ -216,5 +216,82 @@ Dieses Dokument listet alle Änderungen auf, die während dieser Session vorgeno
 
 ---
 
+---
+
+## 12. Multi-Character-TTS mit Tag-Parser (v1.5.0)
+
+### 12.1 Character-Config System
+**Datei**: `character-config.js` (NEU)
+- **Feature**: Zentralisierte Character-Konfiguration
+- **Details**:
+  - `CharacterSettings` Klasse für strukturierte Character-Daten
+  - 8 Charaktere vollständig konfiguriert (Maxx, Terra, Nova, Nyxari, Aurora, Admiral Bishop, Commander Cook, Narrator)
+  - Voice-Mappings korrigiert (Terra→nova, Nova→sage, Nyxari→shimmer, Narrator→ash)
+  - Character-Instructions für TTS-Prompting
+
+### 12.2 Tag-Parser Implementierung
+**Datei**: `main.js`
+- **Feature**: `parseTextWithTags()` Funktion
+- **Details**:
+  - Erkennt `[CHARACTER]` und `[CHARACTER:modifier]` Tags
+  - Teilt Text in Character-Segmente auf
+  - Unterstützt Tag-Mapping (z.B. `NARRATOR` → `Narrator`)
+  - Behandelt mehrzeilige Text-Segmente korrekt
+
+### 12.3 Multi-Character-TTS System
+**Datei**: `main.js`
+- **Feature**: `processMultiCharacterTTS()` Funktion
+- **Details**:
+  - Verarbeitet Text-Dateien mit Character-Tags
+  - Jedes Segment wird mit der korrekten Character-Stimme umgewandelt
+  - Unterstützt lange Texte (Block-Aufteilung)
+  - Progress-Tracking für Multi-Segment-Verarbeitung
+  - Automatische Erkennung von Tags in `txt2mp3-request` und `upload-txt-file-request`
+
+### 12.4 Pausen zwischen Character-Wechseln
+**Datei**: `main.js`
+- **Feature**: FFmpeg-basierte Pausen-Einfügung
+- **Details**:
+  - Konfigurierbare Pausenlänge (Standard: 0.6 Sekunden)
+  - Pausen werden nur zwischen verschiedenen Charakteren eingefügt
+  - Verwendet FFmpeg für nahtlose MP3-Kombination
+  - Temporäre Dateien werden automatisch aufgeräumt
+  - `combineAudioSegmentsWithPauses()` Funktion für FFmpeg-Integration
+
+### 12.5 Integration in bestehende Handler
+**Datei**: `main.js`
+- **Änderungen**:
+  - `txt2mp3-request`: Prüft auf Tags, verwendet Multi-Character-TTS wenn vorhanden
+  - `upload-txt-file-request`: Prüft auf Tags, verwendet Multi-Character-TTS wenn vorhanden
+  - Fallback auf Narrator-Stimme wenn keine Tags gefunden werden
+
+### 12.6 AVATAR_VOICE_MAP aktualisiert
+**Datei**: `main.js`
+- **Änderung**: `AVATAR_VOICE_MAP` verwendet jetzt `CharacterConfig` für Voice und Settings
+- **Vorteil**: Zentrale Konfiguration, einfachere Wartung
+
+---
+
+## 13. Version 1.5.0 - Release Notes
+
+### Neue Features:
+- ✅ **Multi-Character-TTS**: Unterstützung für Text-Dateien mit Character-Tags
+- ✅ **Tag-Parser**: Automatische Erkennung und Verarbeitung von `[CHARACTER]` Tags
+- ✅ **Character-Config System**: Zentrale Konfiguration aller Charaktere
+- ✅ **Pausen zwischen Character-Wechseln**: Natürlichere Dialoge mit konfigurierbaren Pausen
+
+### Technische Verbesserungen:
+- FFmpeg-Integration für Audio-Kombination
+- Temporäre Datei-Verwaltung mit automatischem Cleanup
+- Verbesserte Progress-Tracking für Multi-Segment-Verarbeitung
+
+### Geänderte Dateien:
+1. **main.js** - Tag-Parser, Multi-Character-TTS, Pausen-Logik
+2. **character-config.js** - NEU: Character-Konfiguration
+3. **package.json** - Version 1.5.0
+
+---
+
 **Erstellt am**: $(date)
-**Session**: Button-Prüfung, Karussell-Fixes, Play-Button, Preload.js Fixes
+**Session**: Button-Prüfung, Karussell-Fixes, Play-Button, Preload.js Fixes, Multi-Character-TTS, Tag-Parser, Pausen-Funktion
+**Version**: 1.5.0
