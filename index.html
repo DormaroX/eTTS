@@ -292,6 +292,18 @@
             background-size: 1rem 1rem;
             animation: progress-bar-stripes 1s linear infinite;
         }
+        #progress-container,
+        #block-progress-container,
+        #total-progress-container {
+            display: none; /* Standardmäßig versteckt */
+        }
+        
+        #progress-container.active,
+        #block-progress-container.active,
+        #total-progress-container.active {
+            display: block; /* Nur bei aktiver Umwandlung sichtbar */
+        }
+        
         #progress-text {
             position: absolute;
             top: 50%;
@@ -510,7 +522,7 @@
         .carousel-wrapper {
             position: relative;
             margin: 20px auto;
-            max-width: 800px;
+            max-width: 700px; /* Angepasst für 4 vollständige Charaktere (4 * 140px + 3 * 20px gap + Padding) */
             min-height: 140px;
             padding: 0 60px;
         }
@@ -521,18 +533,20 @@
             background: rgba(0, 0, 0, 0.5);
             border-radius: 10px;
             overflow: hidden;
+            width: 100%;
+            margin: 0 auto;
         }
 
         .character-carousel {
             display: flex;
             gap: 20px;
             overflow-x: auto;
-            scroll-behavior: smooth;
+            scroll-behavior: auto; /* Geändert von 'smooth' zu 'auto' um automatisches Scrollen zu verhindern */
             scrollbar-width: none;
             -ms-overflow-style: none;
             padding: 0 40px;
             margin: 0;
-            justify-content: center;
+            justify-content: flex-start; /* Geändert von 'center' zu 'flex-start' um automatisches Zentrieren zu verhindern */
             align-items: center;
             min-height: 180px;
         }
@@ -783,6 +797,9 @@
         </div>
     </div>
 
+    <!-- Howler.js für Audio-Wiedergabe -->
+    <script src="node_modules/howler/dist/howler.min.js"></script>
+    
     <script nonce="eTTS2025">
         // INIT: Deklariere Global Variables ZUERST
         let selectedCharacter = 'Maxx|ash';  // Standard-Charakter
@@ -800,9 +817,31 @@
             });
         }
 
-        console.log('Initializing event listeners...');
+        // Warte, bis DOM und APIs bereit sind
+        function initializeApp() {
+            console.log('Initializing event listeners...');
+            console.log('window.electronAPI verfügbar:', typeof window.electronAPI !== 'undefined');
+            console.log('window.mediaPlayerControls verfügbar:', typeof window.mediaPlayerControls !== 'undefined');
+            
+            if (typeof window.electronAPI === 'undefined') {
+                console.error('WARNUNG: window.electronAPI ist nicht verfügbar! Preload.js wurde möglicherweise nicht geladen.');
+                // Versuche es nach kurzer Verzögerung erneut
+                setTimeout(() => {
+                    if (typeof window.electronAPI === 'undefined') {
+                        console.error('FEHLER: window.electronAPI ist immer noch nicht verfügbar nach 500ms!');
+                    } else {
+                        console.log('window.electronAPI ist jetzt verfügbar, initialisiere Event-Listener...');
+                        setupEventListeners();
+                    }
+                }, 500);
+                return;
+            }
+            
+            setupEventListeners();
+        }
         
-        // Carousel Navigation
+        function setupEventListeners() {
+            // Carousel Navigation
         const carousel = document.querySelector('.character-carousel');
         const carouselPrevBtn = document.querySelector('.carousel-nav.prev');
         const carouselNextBtn = document.querySelector('.carousel-nav.next');
@@ -860,6 +899,9 @@
                     carousel.querySelectorAll(`.character-card[data-character="${character}"]`).forEach(c => {
                         c.setAttribute('data-selected', 'true');
                     });
+                    
+                    // Aktualisiere selectedCharacter
+                    selectedCharacter = character;
                 }
             });
 
@@ -894,44 +936,17 @@
             
             carouselPrevBtn.addEventListener('click', () => {
                 carousel.scrollBy({
-                    left: -cardWidth * 2,
+                    left: -cardWidth,
                     behavior: 'smooth'
                 });
             });
             
             carouselNextBtn.addEventListener('click', () => {
                 carousel.scrollBy({
-                    left: cardWidth * 2,
+                    left: cardWidth,
                     behavior: 'smooth'
                 });
             });
-            
-            // Automatisches Scrollen
-            let autoScrollInterval;
-            const startAutoScroll = () => {
-                autoScrollInterval = setInterval(() => {
-                    const currentScroll = carousel.scrollLeft;
-                    if (currentScroll >= totalOriginalWidth * 2) {
-                        carousel.scrollLeft = totalOriginalWidth;
-                    }
-                    carousel.scrollBy({
-                        left: cardWidth,
-                        behavior: 'smooth'
-                    });
-                }, 3000);
-            };
-            
-            const stopAutoScroll = () => {
-                clearInterval(autoScrollInterval);
-            };
-            
-            carousel.addEventListener('mouseenter', stopAutoScroll);
-            carousel.addEventListener('mouseleave', startAutoScroll);
-            carouselPrevBtn.addEventListener('mouseenter', stopAutoScroll);
-            carouselNextBtn.addEventListener('mouseenter', stopAutoScroll);
-            
-            // Starte automatisches Scrollen
-            startAutoScroll();
         }
         
         // Playlist Container
@@ -942,52 +957,97 @@
         console.log('Add Files Button:', addFilesButton);
         if (addFilesButton) {
             addFilesButton.addEventListener('click', () => {
-                console.log('Button clicked!');
-                window.electronAPI.openMusicFolder();
+                console.log('+ Button clicked!');
+                if (window.electronAPI && window.electronAPI.openMusicFolder) {
+                    console.log('Calling window.electronAPI.openMusicFolder()');
+                    window.electronAPI.openMusicFolder();
+                } else {
+                    console.error('window.electronAPI oder openMusicFolder nicht verfügbar');
+                    console.log('window.electronAPI:', window.electronAPI);
+                    alert('Fehler: Die Dateiauswahl-Funktion ist nicht verfügbar. Bitte die App neu starten.');
+                }
             });
+        } else {
+            console.error('add-files-button Element nicht gefunden');
         }
 
         // Media Player Controls
         const playButton = document.getElementById('play');
         if (playButton) {
             playButton.addEventListener('click', () => {
-                window.mediaPlayerControls.play();
+                if (window.mediaPlayerControls && window.mediaPlayerControls.play) {
+                    window.mediaPlayerControls.play();
+                } else {
+                    console.error('window.mediaPlayerControls.play nicht verfügbar');
+                }
             });
+        } else {
+            console.error('play Button Element nicht gefunden');
         }
 
         const prevButton = document.getElementById('prev');
         if (prevButton) {
             prevButton.addEventListener('click', () => {
-                window.mediaPlayerControls.prev();
+                if (window.mediaPlayerControls && window.mediaPlayerControls.prev) {
+                    window.mediaPlayerControls.prev();
+                } else {
+                    console.error('window.mediaPlayerControls.prev nicht verfügbar');
+                }
             });
+        } else {
+            console.error('prev Button Element nicht gefunden');
         }
 
         const stopButton = document.getElementById('stop');
         if (stopButton) {
             stopButton.addEventListener('click', () => {
-                window.mediaPlayerControls.stop();
+                if (window.mediaPlayerControls && window.mediaPlayerControls.stop) {
+                    window.mediaPlayerControls.stop();
+                } else {
+                    console.error('window.mediaPlayerControls.stop nicht verfügbar');
+                }
             });
+        } else {
+            console.error('stop Button Element nicht gefunden');
         }
 
         const nextButton = document.getElementById('next');
         if (nextButton) {
             nextButton.addEventListener('click', () => {
-                window.mediaPlayerControls.next();
+                if (window.mediaPlayerControls && window.mediaPlayerControls.next) {
+                    window.mediaPlayerControls.next();
+                } else {
+                    console.error('window.mediaPlayerControls.next nicht verfügbar');
+                }
             });
+        } else {
+            console.error('next Button Element nicht gefunden');
         }
 
         const volumeSlider = document.getElementById('volume-slider');
         if (volumeSlider) {
             volumeSlider.addEventListener('input', (e) => {
-                window.mediaPlayerControls.setVolume(e.target.value);
+                if (window.mediaPlayerControls && window.mediaPlayerControls.setVolume) {
+                    window.mediaPlayerControls.setVolume(e.target.value);
+                } else {
+                    console.error('window.mediaPlayerControls.setVolume nicht verfügbar');
+                }
             });
+        } else {
+            console.error('volume-slider Element nicht gefunden');
         }
 
         const progressBar = document.getElementById('progress-bar');
         if (progressBar) {
             progressBar.addEventListener('click', (e) => {
-                window.mediaPlayerControls.seek(e, progressBar);
+                if (window.mediaPlayerControls && window.mediaPlayerControls.seek) {
+                    window.mediaPlayerControls.seek(e, progressBar);
+                } else {
+                    console.error('window.mediaPlayerControls.seek nicht verfügbar');
+                }
             });
+        } else {
+            console.error('progress-bar Element nicht gefunden');
         }
 
         // Drag and Drop
@@ -1003,53 +1063,126 @@
         });
 
         // Listen Button Event Listener
-        document.getElementById('listen-btn').addEventListener('click', () => {
-            console.log('Listen button clicked');
-            const text = document.getElementById('text-input').value;
-            const avatar = selectedCharacter;
-            console.log('Sending text to TTS:', { text, avatar });
-            window.electronAPI.sendText({ text, avatar });
-        });
+        const listenBtn = document.getElementById('listen-btn');
+        if (listenBtn) {
+            listenBtn.addEventListener('click', () => {
+                console.log('Listen button clicked');
+                const textInput = document.getElementById('text-input');
+                if (!textInput) {
+                    console.error('text-input Element nicht gefunden');
+                    return;
+                }
+                const text = textInput.value;
+                const avatar = selectedCharacter;
+                console.log('Sending text to TTS:', { text, avatar });
+                if (window.electronAPI && window.electronAPI.sendText) {
+                    window.electronAPI.sendText({ text, avatar });
+                } else {
+                    console.error('window.electronAPI.sendText nicht verfügbar');
+                }
+            });
+        } else {
+            console.error('listen-btn Element nicht gefunden');
+        }
 
         // TXT zu MP4 Button Event Listener
-        document.getElementById('txt2mp4-btn').addEventListener('click', () => {
-            console.log('TXT zu MP4 Button geklickt');
-            const text = document.getElementById('text-input').value;
-            const avatar = selectedCharacter;
-            const quality = document.getElementById('quality-select').value;
-            const upscale = document.getElementById('upscale-select').value;
-            
-            console.log('Werte:', { text, avatar, quality, upscale });
-            
-            window.electronAPI.sendTxt2mp4({
-                text,
-                avatar,
-                quality,
-                upscale
+        const txt2mp4Btn = document.getElementById('txt2mp4-btn');
+        if (txt2mp4Btn) {
+            txt2mp4Btn.addEventListener('click', () => {
+                console.log('TXT zu MP4 Button geklickt');
+                const textInput = document.getElementById('text-input');
+                const qualitySelect = document.getElementById('quality-select');
+                const upscaleSelect = document.getElementById('upscale-select');
+                
+                if (!textInput || !qualitySelect || !upscaleSelect) {
+                    console.error('Erforderliche Elemente nicht gefunden');
+                    return;
+                }
+                
+                const text = textInput.value;
+                const avatar = selectedCharacter;
+                const quality = qualitySelect.value;
+                const upscale = upscaleSelect.value;
+                
+                console.log('Werte:', { text, avatar, quality, upscale });
+                
+                if (window.electronAPI && window.electronAPI.sendTxt2mp4) {
+                    window.electronAPI.sendTxt2mp4({
+                        text,
+                        avatar,
+                        quality,
+                        upscale
+                    });
+                } else {
+                    console.error('window.electronAPI.sendTxt2mp4 nicht verfügbar');
+                }
             });
-        });
+        } else {
+            console.error('txt2mp4-btn Element nicht gefunden');
+        }
 
         // Save Button Event Listener
-        document.getElementById('save-btn').addEventListener('click', () => {
-            const text = document.getElementById('text-input').value;
-            const avatar = selectedCharacter;
-            window.electronAPI.saveText({ text, avatar });
-        });
+        const saveBtn = document.getElementById('save-btn');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', () => {
+                const textInput = document.getElementById('text-input');
+                if (!textInput) {
+                    console.error('text-input Element nicht gefunden');
+                    return;
+                }
+                const text = textInput.value;
+                const avatar = selectedCharacter;
+                if (window.electronAPI && window.electronAPI.saveText) {
+                    window.electronAPI.saveText({ text, avatar });
+                } else {
+                    console.error('window.electronAPI.saveText nicht verfügbar');
+                }
+            });
+        } else {
+            console.error('save-btn Element nicht gefunden');
+        }
 
         // TXT zu MP3 Button Event Listener
-        document.getElementById('txt2mp3-btn').addEventListener('click', () => {
-            window.electronAPI.txt2mp3();
-        });
+        const txt2mp3Btn = document.getElementById('txt2mp3-btn');
+        if (txt2mp3Btn) {
+            txt2mp3Btn.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.txt2mp3) {
+                    window.electronAPI.txt2mp3();
+                } else {
+                    console.error('window.electronAPI.txt2mp3 nicht verfügbar');
+                }
+            });
+        } else {
+            console.error('txt2mp3-btn Element nicht gefunden');
+        }
 
         // Upload Button Event Listener
-        document.getElementById('upload-btn').addEventListener('click', () => {
-            window.electronAPI.uploadTxtFile();
-        });
+        const uploadBtn = document.getElementById('upload-btn');
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.uploadTxtFile) {
+                    window.electronAPI.uploadTxtFile();
+                } else {
+                    console.error('window.electronAPI.uploadTxtFile nicht verfügbar');
+                }
+            });
+        } else {
+            console.error('upload-btn Element nicht gefunden');
+        }
 
         // Stop Button Event Listener
-        document.getElementById('stop-btn').addEventListener('click', () => {
-            window.electronAPI.stopProcess();
-        });
+        const stopBtn = document.getElementById('stop-btn');
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => {
+                if (window.electronAPI && window.electronAPI.stopProcess) {
+                    window.electronAPI.stopProcess();
+                } else {
+                    console.error('window.electronAPI.stopProcess nicht verfügbar');
+                }
+            });
+        } else {
+            console.error('stop-btn Element nicht gefunden');
+        }
 
         // Save Complete Handler
         window.electronAPI.onSaveComplete((message) => {
@@ -1060,22 +1193,57 @@
             document.getElementById('block-progress-bar').style.width = "0%";
             document.getElementById('total-progress-bar').style.width = "0%";
             document.getElementById('block-progress-bar').classList.remove('active');
-            document.getElementById('block-progress-text').textContent = 'Kein Block in Bearbeitung';
-            document.getElementById('total-progress-text').textContent = 'Gesamtfortschritt: 0%';
+            document.getElementById('block-progress-text').textContent = '';
+            document.getElementById('total-progress-text').textContent = '';
+            
+            // Verstecke die Container
+            const progressContainer = document.getElementById('progress-container');
+            const blockProgressContainer = document.getElementById('block-progress-container');
+            const totalProgressContainer = document.getElementById('total-progress-container');
+            progressContainer.classList.remove('active');
+            blockProgressContainer.classList.remove('active');
+            totalProgressContainer.classList.remove('active');
         });
 
         // Progress Update Handler
         window.electronAPI.onProgressUpdate((progress, totalBlocks, currentBlock, blockProgress) => {
             requestAnimationFrame(() => {
-                // Wenn alle Werte 0 sind, setze die Balken zurück
+                const progressContainer = document.getElementById('progress-container');
+                const blockProgressContainer = document.getElementById('block-progress-container');
+                const totalProgressContainer = document.getElementById('total-progress-container');
+                
+                // Wenn alle Werte 0 sind oder keine aktive Umwandlung, verstecke die Container
                 if (progress === 0 && totalBlocks === 0 && currentBlock === 0 && blockProgress === 0) {
                     document.getElementById('progress-bar').style.width = "0%";
                     document.getElementById('block-progress-bar').style.width = "0%";
                     document.getElementById('total-progress-bar').style.width = "0%";
                     document.getElementById('block-progress-bar').classList.remove('active');
-                    document.getElementById('progress-text').textContent = 'Bereit';
-                    document.getElementById('block-progress-text').textContent = 'Kein Block in Bearbeitung';
-                    document.getElementById('total-progress-text').textContent = 'Gesamtfortschritt: 0%';
+                    
+                    // Verstecke die Container
+                    progressContainer.classList.remove('active');
+                    blockProgressContainer.classList.remove('active');
+                    totalProgressContainer.classList.remove('active');
+                    
+                    // Leere die Texte
+                    document.getElementById('progress-text').textContent = '';
+                    document.getElementById('block-progress-text').textContent = '';
+                    document.getElementById('total-progress-text').textContent = '';
+                    return;
+                }
+                
+                // Prüfe, ob eine aktive Umwandlung läuft
+                const isActive = totalBlocks > 0 && currentBlock > 0 && currentBlock <= totalBlocks;
+                
+                if (isActive) {
+                    // Zeige die Container bei aktiver Umwandlung
+                    progressContainer.classList.add('active');
+                    blockProgressContainer.classList.add('active');
+                    totalProgressContainer.classList.add('active');
+                } else {
+                    // Verstecke die Container, wenn keine aktive Umwandlung
+                    progressContainer.classList.remove('active');
+                    blockProgressContainer.classList.remove('active');
+                    totalProgressContainer.classList.remove('active');
                     return;
                 }
 
@@ -1146,12 +1314,20 @@
             });
         });
 
-        // Initial update
-        updateActiveCharacter();
-
-
-        // Initialen Zustand setzen
-        updateActiveCharacter();
+            // Initial update
+            updateActiveCharacter();
+        }
+        
+        // Initialisiere die App, wenn DOM bereit ist
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                // Warte kurz, damit preload.js die APIs exponiert hat
+                setTimeout(initializeApp, 100);
+            });
+        } else {
+            // DOM ist bereits geladen
+            setTimeout(initializeApp, 100);
+        }
 
         // Funktion zum Formatieren der Zeit
         function formatTime(seconds) {

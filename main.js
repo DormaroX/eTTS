@@ -74,6 +74,7 @@ function createWindow() {
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true,
+            sandbox: false,  // Deaktiviere Sandbox, damit fs in preload.js verfügbar ist
             webSecurity: true,
             allowRunningInsecureContent: false,
             preload: path.join(__dirname, 'preload.js'),
@@ -90,7 +91,7 @@ function createWindow() {
     mainWindow.loadFile('index.html')
         .then(() => {
             // DevTools im Entwicklungsmodus immer öffnen
-            if (process.argv.includes('dev')) {
+            if (process.argv.includes('dev') || process.env.NODE_ENV === 'development') {
                 mainWindow.webContents.openDevTools();
             }
         })
@@ -99,9 +100,12 @@ function createWindow() {
             dialog.showErrorBox('Fehler', 'Konnte die HTML-Datei nicht laden. Bitte versuche es erneut.');
         });
 
-    // Entwicklertools in Entwicklungsumgebung aktivieren
-    if (process.env.NODE_ENV === 'development') {
-        mainWindow.webContents.openDevTools();
+    // Entwicklertools in Entwicklungsumgebung aktivieren (auch nach dem Laden)
+    if (process.env.NODE_ENV === 'development' || process.argv.includes('dev')) {
+        // Warte kurz, dann öffne DevTools
+        setTimeout(() => {
+            mainWindow.webContents.openDevTools();
+        }, 500);
     }
 }
 
@@ -124,9 +128,17 @@ app.on('window-all-closed', () => {
 // "Anhören" (schneller, mit `tts-1`)
 ipcMain.on('tts-playback', async (event, data) => {
     console.log('main.js: Received TTS request:', data);
+    // Setze stopRequested zurück, wenn ein neuer Prozess startet
+    stopRequested = false;
     try {
         if (!data || !data.text || data.text.trim() === '') {
             event.sender.send('error', 'Bitte gebe einen Text ein.');
+            return;
+        }
+
+        // Prüfe stopRequested vor der API-Anfrage
+        if (stopRequested) {
+            console.log('TTS Playback wurde gestoppt');
             return;
         }
 
@@ -145,6 +157,12 @@ ipcMain.on('tts-playback', async (event, data) => {
             response_format: "mp3"
         });
 
+        // Prüfe stopRequested nach der API-Anfrage
+        if (stopRequested) {
+            console.log('TTS Playback wurde nach API-Aufruf gestoppt');
+            return;
+        }
+
         // Konvertiere die Response in einen Buffer
         const buffer = Buffer.from(await mp3.arrayBuffer());
         event.sender.send('tts-playback-result', buffer);
@@ -152,6 +170,11 @@ ipcMain.on('tts-playback', async (event, data) => {
         console.log(`Wiedergabe abgeschlossen für: ${data.text}`);
 
     } catch (error) {
+        // Ignoriere Fehler, wenn der Prozess gestoppt wurde
+        if (stopRequested) {
+            console.log('TTS Playback wurde während der Verarbeitung gestoppt');
+            return;
+        }
         console.error("Fehler beim TTS Playback:", error);
         event.sender.send('error', 'Fehler beim Text-zu-Sprache-Konvertierung. Bitte versuche es erneut.');
     }
@@ -184,6 +207,12 @@ function checkOutputDirectory(dirPath) {
 
 // Funktion zur Generierung des Videos mit SadTalker
 async function generateVideo(audioPath, avatarName, quality, upscale) {
+    // Prüfe stopRequested vor dem Start
+    if (stopRequested) {
+        console.log('generateVideo wurde gestoppt, bevor es startete');
+        throw new Error('Video-Generierung wurde gestoppt');
+    }
+    
     console.log('Starte Video-Generierung...');
     console.log(`Audio: ${audioPath}`);
     console.log(`Avatar: ${avatarName}`);
@@ -242,6 +271,13 @@ async function generateVideo(audioPath, avatarName, quality, upscale) {
     command += ` && rm -rf "${tempOutputDir}"`;
 
     return new Promise((resolve, reject) => {
+        // Prüfe stopRequested vor dem Start des Prozesses
+        if (stopRequested) {
+            console.log('generateVideo wurde vor Prozess-Start gestoppt');
+            reject(new Error('Video-Generierung wurde gestoppt'));
+            return;
+        }
+        
         console.log('Starte SadTalker-Prozess...');
         const sadtalker = exec(command);
 
@@ -254,6 +290,19 @@ async function generateVideo(audioPath, avatarName, quality, upscale) {
         });
 
         sadtalker.on('close', (code) => {
+            // Prüfe stopRequested nach dem Prozess
+            if (stopRequested) {
+                console.log('generateVideo wurde während der Ausführung gestoppt');
+                // Versuche den Prozess zu killen, falls er noch läuft
+                try {
+                    sadtalker.kill();
+                } catch (e) {
+                    console.log('Konnte Prozess nicht killen:', e);
+                }
+                reject(new Error('Video-Generierung wurde gestoppt'));
+                return;
+            }
+            
             if (code === 0) {
                 console.log('SadTalker erfolgreich beendet');
                 resolve();
@@ -262,16 +311,46 @@ async function generateVideo(audioPath, avatarName, quality, upscale) {
                 reject(new Error(`SadTalker-Fehler: ${code}`));
             }
         });
+        
+        // Prüfe periodisch, ob stopRequested gesetzt wurde
+        const checkInterval = setInterval(() => {
+            if (stopRequested) {
+                console.log('generateVideo: Stop erkannt, beende Prozess...');
+                clearInterval(checkInterval);
+                try {
+                    sadtalker.kill('SIGTERM');
+                    // Falls SIGTERM nicht funktioniert, verwende SIGKILL
+                    setTimeout(() => {
+                        try {
+                            sadtalker.kill('SIGKILL');
+                        } catch (e) {
+                            console.log('Konnte Prozess nicht killen:', e);
+                        }
+                    }, 2000);
+                } catch (e) {
+                    console.log('Fehler beim Beenden des Prozesses:', e);
+                }
+                reject(new Error('Video-Generierung wurde gestoppt'));
+            }
+        }, 500); // Prüfe alle 500ms
+        
+        // Cleanup bei erfolgreichem Abschluss
+        sadtalker.on('close', () => {
+            clearInterval(checkInterval);
+        });
     });
 }
 
 // Event-Handler für Stop-Anforderung
 ipcMain.on('stop-process', (event) => {
+    console.log('Stop-Button wurde gedrückt');
     stopRequested = true;
     // Setze Fortschrittsbalken sofort zurück
     event.sender.send('progress-update', 0, 0, 0, 0);
     // Setze Audio-Progress zurück
     event.sender.send('audio-progress', 0, 0);
+    // Sende Bestätigung
+    event.sender.send('stop-confirmed');
 });
 
 // Event-Handler für Audio-Progress
@@ -286,10 +365,11 @@ ipcMain.on('audio-progress', (event, currentTime, duration) => {
 
 // Funktion für die Verarbeitung von Textdateien als eine MP3
 async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
+    // Setze stopRequested zurück, wenn ein neuer Prozess startet
     stopRequested = false;
     try {
         if (stopRequested) {
-            stopRequested = false;
+            console.log('txt2mp3 wurde gestoppt');
             return;
         }
 
@@ -318,7 +398,8 @@ async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
         // Verarbeite jeden Block einzeln und kombiniere sie
         for (const block of blocks) {
             if (stopRequested) {
-                console.log('Prozess wurde gestoppt');
+                console.log('txt2mp3 Prozess wurde gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
                 return;
             }
 
@@ -328,6 +409,13 @@ async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
             console.log(`Verarbeite Block ${currentBlock} von ${totalBlocks}...`);
             event.sender.send('progress-update', progress, totalBlocks, currentBlock, progress);
 
+            // Prüfe stopRequested vor dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp3 wurde vor API-Aufruf gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
+
             const response = await openai.audio.speech.create({
                 model: "tts-1-hd",
                 voice: voice,
@@ -335,12 +423,33 @@ async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
                 response_format: "mp3"
             });
 
+            // Prüfe stopRequested nach dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp3 wurde nach API-Aufruf gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
+
             const blockBuffer = Buffer.from(await response.arrayBuffer());
             combinedAudioBuffer = Buffer.concat([combinedAudioBuffer, blockBuffer]);
         }
 
+        // Prüfe stopRequested vor dem Speichern
+        if (stopRequested) {
+            console.log('txt2mp3 wurde vor dem Speichern gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         console.log('Speichere kombinierte AudioBuffer...');
         await fsPromises.writeFile(outputPath, combinedAudioBuffer);
+
+        // Prüfe stopRequested nach dem Speichern
+        if (stopRequested) {
+            console.log('txt2mp3 wurde nach dem Speichern gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
 
         event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
         event.sender.send('tts-save-result', outputPath);
@@ -348,6 +457,12 @@ async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
         console.log(`MP3-Datei gespeichert als: ${path.basename(outputPath)}`);
 
     } catch (error) {
+        // Ignoriere Fehler, wenn der Prozess gestoppt wurde
+        if (stopRequested) {
+            console.log('txt2mp3 wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
         console.error("Fehler bei der MP3-Generierung:", error);
         event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
         throw error;
@@ -356,10 +471,11 @@ async function txt2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
 
 // Funktion für die block-basierte MP3-Generierung mit separaten Dateien
 async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
+    // Setze stopRequested zurück, wenn ein neuer Prozess startet
     stopRequested = false;
     try {
         if (stopRequested) {
-            stopRequested = false;
+            console.log('txt2mp3blocks wurde gestoppt');
             return;
         }
 
@@ -390,7 +506,8 @@ async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
         // Verarbeite jeden Block einzeln
         for (const block of blocks) {
             if (stopRequested) {
-                console.log('Prozess wurde gestoppt');
+                console.log('txt2mp3blocks Prozess wurde gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
                 return;
             }
 
@@ -403,12 +520,26 @@ async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
             // Erstelle den Dateinamen für diesen Block
             const blockPath = blocks.length > 1 ? `${outputBaseName}_${currentBlock}.mp3` : outputPath;
 
+            // Prüfe stopRequested vor dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp3blocks wurde vor API-Aufruf gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
+
             const response = await openai.audio.speech.create({
                 model: "tts-1-hd",
                 voice: voice,
                 input: block,
                 response_format: "mp3"
             });
+
+            // Prüfe stopRequested nach dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp3blocks wurde nach API-Aufruf gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
 
             // Speichere die Block-MP3
             const blockBuffer = Buffer.from(await response.arrayBuffer());
@@ -417,11 +548,24 @@ async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
             console.log(`Block ${currentBlock} gespeichert als: ${path.basename(blockPath)}`);
         }
 
+        // Prüfe stopRequested vor dem Abschluss
+        if (stopRequested) {
+            console.log('txt2mp3blocks wurde vor dem Abschluss gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         event.sender.send('progress-update', 100, totalBlocks, totalBlocks, 100);
         event.sender.send('tts-save-result', outputPath);
         console.log('Alle Blöcke wurden erfolgreich gespeichert.');
 
     } catch (error) {
+        // Ignoriere Fehler, wenn der Prozess gestoppt wurde
+        if (stopRequested) {
+            console.log('txt2mp3blocks wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
         console.error("Fehler bei der MP3-Generierung:", error);
         event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
         throw error;
@@ -431,10 +575,11 @@ async function txt2mp3blocks(event, text, outputPath, avatar = 'Nova|Nova') {
 
 // Funktion zum Speichern von Text aus dem Textfeld als MP3
 async function save2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
+    // Setze stopRequested zurück, wenn ein neuer Prozess startet
     stopRequested = false;
     try {
         if (stopRequested) {
-            stopRequested = false;
+            console.log('save2mp3 wurde gestoppt');
             return;
         }
 
@@ -457,6 +602,13 @@ async function save2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
         // Generiere die MP3
         event.sender.send('progress-update', 0, 1, 0, 0);
         
+        // Prüfe stopRequested vor dem API-Aufruf
+        if (stopRequested) {
+            console.log('save2mp3 wurde vor API-Aufruf gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+        
         const response = await openai.audio.speech.create({
             model: "tts-1-hd",
             voice: voice,
@@ -464,9 +616,23 @@ async function save2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
             response_format: "mp3"
         });
 
+        // Prüfe stopRequested nach dem API-Aufruf
+        if (stopRequested) {
+            console.log('save2mp3 wurde nach API-Aufruf gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         // Speichere die MP3-Datei
         const buffer = Buffer.from(await response.arrayBuffer());
         await fsPromises.writeFile(outputPath, buffer);
+
+        // Prüfe stopRequested nach dem Speichern
+        if (stopRequested) {
+            console.log('save2mp3 wurde nach dem Speichern gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
 
         event.sender.send('progress-update', 100, 1, 1, 100);
         event.sender.send('tts-save-result', outputPath);
@@ -474,50 +640,36 @@ async function save2mp3(event, text, outputPath, avatar = 'Nova|Nova') {
         console.log(`MP3-Datei gespeichert als: ${path.basename(outputPath)}`);
 
     } catch (error) {
+        // Ignoriere Fehler, wenn der Prozess gestoppt wurde
+        if (stopRequested) {
+            console.log('save2mp3 wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
         console.error("Fehler bei der MP3-Generierung:", error);
         event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
         throw error;
     }
 }
 
-// "Als MP3 speichern" (höhere Qualität mit `tts-1-hd`)
-ipcMain.on('tts-save', async (event, text, filePath, avatar) => {
-    try {
-        if (stopRequested) {
-            return;
-        }
-        await save2mp3(event, text, filePath, avatar);
-    } catch (error) {
-        if (!stopRequested) {
-            console.error("Fehler beim Speichern der MP3-Datei:", error);
-            event.sender.send('error', 'Fehler beim Speichern der MP3-Datei. Bitte versuche es erneut.');
-        }
-    }
-});
-
-// "TXT-Datei hochladen und umwandeln"
-ipcMain.on('upload-txt-file', async (event, text, mp3Path, avatar) => {
-    try {
-        console.log('Starte Verarbeitung der TXT-Datei...');
-        console.log(`Textlänge: ${text.length} Zeichen`);
-
-        // Generiere MP3s in Blöcken
-        await txt2mp3blocks(event, text, mp3Path, avatar);
-
-        console.log('TXT-Datei erfolgreich verarbeitet.');
-        event.sender.send('save-complete', `TXT-zu-MP3 Konvertierung abgeschlossen: ${path.basename(mp3Path)}`);
-    } catch (error) {
-        console.error("Fehler beim Umwandeln der TXT-Datei in MP3:", error);
-        event.sender.send('error', `Fehler beim Konvertieren der TXT-Datei: ${error.message}`);
-    }
-});
+// Veraltete Handler wurden entfernt:
+// - 'tts-save' wurde durch 'save-text-request' ersetzt
+// - 'upload-txt-file' wurde durch 'upload-txt-file-request' ersetzt
 
 // Event-Handler für Text-zu-Video (txt2mp4)
 ipcMain.on('txt2mp4-request', async (event, data) => {
     console.log('txt2mp4-request empfangen:', data);
+    // Setze stopRequested zurück, wenn ein neuer Prozess startet
+    stopRequested = false;
     const { text, avatar, quality, upscale } = data;
     try {
         event.sender.send('progress-update', 0, 0, 0, 0);
+        
+        // Prüfe stopRequested vor dem Start
+        if (stopRequested) {
+            console.log('txt2mp4 wurde gestoppt');
+            return;
+        }
         
         // 1. Generiere Audio mit der entsprechenden Stimme
         console.log('Starte Audio-Generierung...');
@@ -526,24 +678,66 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
         
         let audioResponse;
         try {
+            // Prüfe stopRequested vor dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp4 wurde vor Audio-Generierung gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
+            
             audioResponse = await openai.audio.speech.create({
                 model: 'tts-1-hd',
                 voice: avatarInfo.voice,
                 input: text
             });
             console.log('Audio erfolgreich generiert');
+            
+            // Prüfe stopRequested nach dem API-Aufruf
+            if (stopRequested) {
+                console.log('txt2mp4 wurde nach Audio-Generierung gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
+                return;
+            }
         } catch (error) {
+            if (stopRequested) {
+                console.log('txt2mp4 wurde während Audio-Generierung gestoppt');
+                return;
+            }
             console.error('Fehler bei OpenAI:', error);
             throw error;
         }
 
+        // Prüfe stopRequested vor dem Speichern
+        if (stopRequested) {
+            console.log('txt2mp4 wurde vor dem Speichern gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+        
         // 2. Speichere Audio temporär als MP3
         const tempMp3Path = path.join(SADTALKER_PATH, 'input_audio.mp3');
         const tempWavPath = path.join(SADTALKER_PATH, 'input_audio.wav');
         const buffer = Buffer.from(await audioResponse.arrayBuffer());
         await fsPromises.writeFile(tempMp3Path, buffer);
 
+        // Prüfe stopRequested nach dem Speichern
+        if (stopRequested) {
+            console.log('txt2mp4 wurde nach dem Speichern gestoppt');
+            // Aufräumen
+            try { await fsPromises.unlink(tempMp3Path); } catch (e) {}
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         event.sender.send('progress-update', 25, 0, 0, 0);
+
+        // Prüfe stopRequested vor FFmpeg
+        if (stopRequested) {
+            console.log('txt2mp4 wurde vor FFmpeg gestoppt');
+            try { await fsPromises.unlink(tempMp3Path); } catch (e) {}
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
 
         // Konvertiere zu WAV für SadTalker
         console.log('Starte FFmpeg-Konvertierung...');
@@ -561,6 +755,11 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
             });
             
             ffmpeg.on('close', (code) => {
+                if (stopRequested) {
+                    console.log('txt2mp4 wurde während FFmpeg gestoppt');
+                    resolve(); // Resolve, um Aufräumen zu ermöglichen
+                    return;
+                }
                 if (code === 0) {
                     console.log('FFmpeg-Konvertierung erfolgreich');
                     resolve();
@@ -571,13 +770,40 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
             });
         });
 
+        // Prüfe stopRequested nach FFmpeg
+        if (stopRequested) {
+            console.log('txt2mp4 wurde nach FFmpeg gestoppt');
+            // Aufräumen
+            try { await fsPromises.unlink(tempMp3Path); } catch (e) {}
+            try { await fsPromises.unlink(tempWavPath); } catch (e) {}
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         // Lösche MP3
         await fsPromises.unlink(tempMp3Path);
 
         event.sender.send('progress-update', 50, 0, 0, 0);
 
+        // Prüfe stopRequested vor Video-Generierung
+        if (stopRequested) {
+            console.log('txt2mp4 wurde vor Video-Generierung gestoppt');
+            try { await fsPromises.unlink(tempWavPath); } catch (e) {}
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+
         // 3. Generiere Video mit SadTalker
         await generateVideo(tempWavPath, avatar.split('|')[0], quality, upscale);
+        
+        // Prüfe stopRequested nach Video-Generierung
+        if (stopRequested) {
+            console.log('txt2mp4 wurde nach Video-Generierung gestoppt');
+            try { await fsPromises.unlink(tempWavPath); } catch (e) {}
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
+        
         // Lösche WAV
         await fsPromises.unlink(tempWavPath);
 
@@ -585,26 +811,19 @@ ipcMain.on('txt2mp4-request', async (event, data) => {
         event.sender.send('process-complete');
 
     } catch (error) {
+        // Ignoriere Fehler, wenn der Prozess gestoppt wurde
+        if (stopRequested) {
+            console.log('txt2mp4 wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
         console.error('Fehler bei der Video-Generierung:', error);
         event.sender.send('error', error.message);
     }
 });
 
-// "txt2mp3" - Konvertiert eine TXT-Datei in eine einzelne MP3
-ipcMain.on('txt2mp3', async (event, text, outputPath) => {
-    try {
-        if (stopRequested) {
-            return;
-        }
-        await txt2mp3(event, text, outputPath);
-        event.sender.send('save-complete', `TXT-zu-MP3 Konvertierung abgeschlossen: ${path.basename(outputPath)}`);
-    } catch (error) {
-        if (!stopRequested) {
-            console.error("Fehler bei der MP3-Generierung:", error);
-            event.sender.send('error', `Fehler bei der Text-zu-Sprache-Konvertierung: ${error.message}`);
-        }
-    }
-});
+// Veralteter Handler wurde entfernt:
+// - 'txt2mp3' wurde durch 'txt2mp3-request' ersetzt
 
 // "Als MP3 speichern" - Speichert TTS-generierte Audio als MP3-Datei
 ipcMain.on('save-text-request', async (event, data) => {
@@ -770,9 +989,14 @@ ipcMain.on('upload-txt-file-request', async (event) => {
         // Array für MP3-Buffer
         const audioBuffers = [];
 
+        // Setze stopRequested zurück, wenn ein neuer Prozess startet
+        stopRequested = false;
+        
         // Verarbeite jeden Block
         for (let i = 0; i < chunks.length; i++) {
             if (stopRequested) {
+                console.log('upload-txt-file-request wurde gestoppt');
+                event.sender.send('progress-update', 0, 0, 0, 0);
                 event.sender.send('error', 'Prozess unterbrochen.');
                 return;
             }
@@ -784,6 +1008,14 @@ ipcMain.on('upload-txt-file-request', async (event) => {
             event.sender.send('progress-update', 0, totalBlocks, currentBlock, 0);
 
             try {
+                // Prüfe stopRequested vor dem API-Aufruf
+                if (stopRequested) {
+                    console.log('upload-txt-file-request wurde vor API-Aufruf gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    event.sender.send('error', 'Prozess unterbrochen.');
+                    return;
+                }
+                
                 // Generiere Audio mit OpenAI TTS (tts-1-hd für höhere Qualität)
                 const mp3 = await openai.audio.speech.create({
                     model: "tts-1-hd",
@@ -792,6 +1024,14 @@ ipcMain.on('upload-txt-file-request', async (event) => {
                     response_format: "mp3"
                 });
 
+                // Prüfe stopRequested nach dem API-Aufruf
+                if (stopRequested) {
+                    console.log('upload-txt-file-request wurde nach API-Aufruf gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    event.sender.send('error', 'Prozess unterbrochen.');
+                    return;
+                }
+
                 const buffer = Buffer.from(await mp3.arrayBuffer());
                 audioBuffers.push(buffer);
 
@@ -799,15 +1039,35 @@ ipcMain.on('upload-txt-file-request', async (event) => {
                 event.sender.send('progress-update', Math.round((currentBlock / totalBlocks) * 100), totalBlocks, currentBlock, 100);
 
             } catch (blockError) {
+                if (stopRequested) {
+                    console.log('upload-txt-file-request wurde während Block-Verarbeitung gestoppt');
+                    event.sender.send('progress-update', 0, 0, 0, 0);
+                    return;
+                }
                 console.error(`Fehler beim Verarbeiten von Block ${currentBlock}:`, blockError);
                 event.sender.send('error', `Fehler bei Block ${currentBlock}: ${blockError.message}`);
                 return;
             }
         }
 
+        // Prüfe stopRequested vor dem Kombinieren
+        if (stopRequested) {
+            console.log('upload-txt-file-request wurde vor dem Kombinieren gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            event.sender.send('error', 'Prozess unterbrochen.');
+            return;
+        }
+        
         // Kombiniere alle Audio-Buffer zu einer Datei
         const combinedBuffer = Buffer.concat(audioBuffers);
         await fsPromises.writeFile(outputPath, combinedBuffer);
+
+        // Prüfe stopRequested nach dem Speichern
+        if (stopRequested) {
+            console.log('upload-txt-file-request wurde nach dem Speichern gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
 
         // Setze Fortschritt zurück
         event.sender.send('progress-update', 0, 0, 0, 0);
@@ -815,8 +1075,40 @@ ipcMain.on('upload-txt-file-request', async (event) => {
         console.log(`TXT mit Blockverarbeitung zu MP3 konvertiert: ${outputPath} (${totalBlocks} Blöcke)`);
 
     } catch (error) {
+        if (stopRequested) {
+            console.log('upload-txt-file-request wurde während der Verarbeitung gestoppt');
+            event.sender.send('progress-update', 0, 0, 0, 0);
+            return;
+        }
         console.error('Fehler bei TXT zu MP3 Blockverarbeitung:', error);
         event.sender.send('error', `Fehler bei der Blockverarbeitung: ${error.message}`);
+    }
+});
+
+// "Dateien zur Playlist hinzufügen" - Öffnet Dialog zur Auswahl von Audio-Dateien
+ipcMain.on('open-music-folder', async (event) => {
+    try {
+        const result = await dialog.showOpenDialog(mainWindow, {
+            title: 'Audio-Dateien auswählen',
+            defaultPath: app.getPath('music'),
+            filters: [
+                { name: 'Audio-Dateien', extensions: ['mp3', 'wav', 'ogg', 'm4a', 'flac', 'aac'] },
+                { name: 'Alle Dateien', extensions: ['*'] }
+            ],
+            properties: ['openFile', 'multiSelections']
+        });
+
+        if (result.cancelled || result.filePaths.length === 0) {
+            return;
+        }
+
+        // Sende die ausgewählten Dateien an den Renderer-Prozess
+        event.sender.send('files-selected', result.filePaths);
+        console.log(`Dateien zur Playlist hinzugefügt: ${result.filePaths.length} Datei(en)`);
+
+    } catch (error) {
+        console.error('Fehler beim Öffnen des Dateiauswahl-Dialogs:', error);
+        event.sender.send('error', `Fehler beim Öffnen des Dateiauswahl-Dialogs: ${error.message}`);
     }
 });
 

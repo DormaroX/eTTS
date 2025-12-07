@@ -1,4 +1,18 @@
 const { contextBridge, ipcRenderer, shell } = require('electron');
+const fs = require('fs');
+const fsPromises = require('fs').promises;
+const path = require('path');
+
+// Lade Howler.js
+let Howl, Howler;
+try {
+    const howler = require('howler');
+    Howl = howler.Howl;
+    Howler = howler.Howler;
+    console.log('Howler.js erfolgreich geladen');
+} catch (e) {
+    console.error('Howler.js nicht gefunden:', e);
+}
 
 // Globale Variablen für die Playlist-Funktionalität
 let playlist = [];
@@ -68,7 +82,73 @@ const electronAPI = {
 // Expose APIs
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
+// Hilfsfunktion zum Hinzufügen einer Datei zur Playlist (wird sowohl von IPC als auch von der exponierten API verwendet)
+async function addFileToPlaylist(file) {
+    try {
+        console.log('Lade Audio-Datei:', file.name);
+        
+        // Erstelle eine temporäre Datei
+        const tempPath = path.join(require('os').tmpdir(), file.name);
+        const buffer = Buffer.from(await file.arrayBuffer());
+        await fsPromises.writeFile(tempPath, buffer);
+        
+        console.log('Temporäre Datei erstellt:', tempPath);
+        
+        // Ermittle die Dauer mit mp3-duration
+        const mp3Duration = require('mp3-duration');
+        const duration = await new Promise((resolve, reject) => {
+            const buffer = fs.readFileSync(tempPath);
+            mp3Duration(buffer, (err, durationValue) => {
+                if (err) {
+                    console.error('Fehler bei mp3-duration:', err);
+                    reject(err);
+                    return;
+                }
+                
+                if (durationValue === undefined || typeof durationValue !== 'number') {
+                    reject(new Error(`Ungültige Dauer: ${durationValue}`));
+                    return;
+                }
+                
+                resolve(durationValue);
+            });
+        });
+        
+        // Lösche die temporäre Datei
+        await fsPromises.unlink(tempPath);
+        
+        // Validiere die Dauer
+        if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+            throw new Error(`Ungültige Dauer: ${duration} (${typeof duration})`);
+        }
 
+        // Erstelle das Track-Objekt
+        const track = {
+            name: file.name,
+            url: URL.createObjectURL(file),
+            duration: duration
+        };
+        
+        console.log('Track hinzugefügt:', {
+            name: track.name,
+            duration: track.duration,
+            durationType: typeof track.duration
+        });
+        
+        playlist.push(track);
+        updatePlaylistUI();
+    } catch (error) {
+        console.error('Fehler beim Laden:', error);
+        const track = {
+            name: `${file.name} [Fehler: ${error.message}]`,
+            url: URL.createObjectURL(file),
+            duration: 0
+        };
+        playlist.push(track);
+        updatePlaylistUI();
+        throw error;
+    }
+}
 
 // Expose APIs to renderer process
 contextBridge.exposeInMainWorld('mediaPlayer', {
@@ -137,17 +217,11 @@ contextBridge.exposeInMainWorld('mediaPlayer', {
                 formattedDuration: formatTime(track.duration)
             });
             
-            playlist.push(track);
-            updatePlaylistUI();
+            // Verwende die gemeinsame Hilfsfunktion
+            await addFileToPlaylist(file);
         } catch (error) {
             console.error('Fehler beim Laden:', error);
-            const track = {
-                name: `${file.name} [Fehler: ${error.message}]`,
-                url: URL.createObjectURL(file),
-                duration: 0
-            };
-            playlist.push(track);
-            updatePlaylistUI();
+            // Fehler wird bereits in addFileToPlaylist behandelt
         }
     },
     
@@ -414,12 +488,31 @@ function updatePlaylistUI() {
 
 
 function playTrack(index) {
+    if (index < 0 || index >= playlist.length) {
+        console.error('Ungültiger Track-Index:', index);
+        return;
+    }
+    
     if (currentSound) {
         currentSound.stop();
+        currentSound.unload();
     }
 
     currentIndex = index;
     const track = playlist[index];
+    
+    if (!track || !track.url) {
+        console.error('Track oder URL fehlt:', track);
+        return;
+    }
+    
+    console.log('Spiele Track ab:', track.name, 'URL:', track.url);
+    
+    // Prüfe, ob Howl verfügbar ist
+    if (!Howl) {
+        console.error('Howl ist nicht verfügbar! Howler.js konnte nicht geladen werden.');
+        return;
+    }
     
     currentSound = new Howl({
         src: [track.url],  // Verwende url statt path
@@ -514,7 +607,11 @@ contextBridge.exposeInMainWorld('mediaPlayerControls', {
     },
 
     setVolume: (value) => {
-        Howler.volume(value / 100);
+        if (Howler) {
+            Howler.volume(value / 100);
+        } else {
+            console.error('Howler ist nicht verfügbar');
+        }
     },
 
     stop: () => {
@@ -576,4 +673,29 @@ ipcRenderer.on('tts-save-result', (event, filePath) => {
 
 ipcRenderer.on('error', (event, message) => {
     alert(message);
+});
+
+// Event-Listener für ausgewählte Dateien vom Dateiauswahl-Dialog
+ipcRenderer.on('files-selected', async (event, filePaths) => {
+    console.log('Dateien empfangen:', filePaths);
+    
+    // Lade jede Datei und füge sie zur Playlist hinzu
+    for (const filePath of filePaths) {
+        try {
+            // Lese die Datei als Buffer
+            const buffer = fs.readFileSync(filePath);
+            
+            // Erstelle ein File-ähnliches Objekt
+            const fileName = path.basename(filePath);
+            const blob = new Blob([buffer]);
+            const file = new File([blob], fileName, { type: 'audio/mpeg' });
+            
+            // Rufe die Hilfsfunktion direkt auf
+            await addFileToPlaylist(file);
+        } catch (error) {
+            console.error(`Fehler beim Laden der Datei ${filePath}:`, error);
+            // Sende Fehler an Renderer-Prozess
+            event.sender.send('error', `Fehler beim Laden von ${path.basename(filePath)}: ${error.message}`);
+        }
+    }
 });
