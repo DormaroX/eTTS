@@ -207,90 +207,87 @@ const electronAPI = {
 // Expose APIs
 contextBridge.exposeInMainWorld('electronAPI', electronAPI);
 
-// Internal function to add file to playlist
-async function addFileToPlaylist(file) {
-    try {
-        console.log('Lade Audio-Datei:', file.name);
-        
-        // Erstelle eine temporäre Datei
-        const tempPath = path.join(require('os').tmpdir(), file.name);
-        const buffer = Buffer.from(await file.arrayBuffer());
-        await fsPromises.writeFile(tempPath, buffer);
-        
-        console.log('Temporäre Datei erstellt:', tempPath);
-        
-        // Ermittle die Dauer mit mp3-duration
-        console.log('Temporäre Datei existiert:', await fsPromises.access(tempPath).then(() => true).catch(() => false));
-        console.log('Temporäre Datei Stats:', await fsPromises.stat(tempPath));
-        
-        const duration = await new Promise((resolve, reject) => {
-            console.log('Starte mp3-duration für:', tempPath);
-            
-            // Direkte Verwendung des Buffers statt der Datei
-            const buffer = fs.readFileSync(tempPath);
-            mp3Duration(buffer, (err, durationValue) => {
-                if (err) {
-                    console.error('Fehler bei mp3-duration:', err);
-                    reject(err);
-                    return;
-                }
-                
-                console.log('MP3 Dauer ermittelt:', durationValue, 'Sekunden');
-                console.log('Dauer Typ:', typeof durationValue);
-                
-                if (durationValue === undefined || typeof durationValue !== 'number') {
-                    console.error('Dauer ist undefined oder kein number!');
-                    reject(new Error(`Ungültige Dauer: ${durationValue}`));
-                    return;
-                }
-                
-                resolve(durationValue);
-            });
-        });
-        
-        console.log('Dauer nach Promise:', duration, 'Sekunden');
-        console.log('Dauer Typ nach Promise:', typeof duration);
-        
-        // Lösche die temporäre Datei
-        await fsPromises.unlink(tempPath);
-        
-        // Validiere die Dauer
-        if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
-            throw new Error(`Ungültige Dauer: ${duration} (${typeof duration})`);
-        }
 
-        // Erstelle das Track-Objekt
-        const track = {
-            name: file.name,  // Kein Debug-Info mehr im Namen
-            url: URL.createObjectURL(file),
-            duration: duration  // Bereits eine Nummer von mp3-duration
-        };
-        
-        console.log('Track hinzugefügt:', {
-            name: track.name,
-            duration: track.duration,
-            durationType: typeof track.duration,
-            formattedDuration: formatTime(track.duration)
-        });
-        
-        playlist.push(track);
-        updatePlaylistUI();
-    } catch (error) {
-        console.error('Fehler beim Laden:', error);
-        const track = {
-            name: `${file.name} [Fehler: ${error.message}]`,
-            url: URL.createObjectURL(file),
-            duration: 0
-        };
-        playlist.push(track);
-        updatePlaylistUI();
-    }
-}
 
 // Expose APIs to renderer process
 contextBridge.exposeInMainWorld('mediaPlayer', {
     addToPlaylist: async (file) => {
-        await addFileToPlaylist(file);
+        try {
+            console.log('Lade Audio-Datei:', file.name);
+            
+            // Erstelle eine temporäre Datei
+            const tempPath = path.join(require('os').tmpdir(), file.name);
+            const buffer = Buffer.from(await file.arrayBuffer());
+            await fsPromises.writeFile(tempPath, buffer);
+            
+            console.log('Temporäre Datei erstellt:', tempPath);
+            
+            // Ermittle die Dauer mit mp3-duration
+            console.log('Temporäre Datei existiert:', await fsPromises.access(tempPath).then(() => true).catch(() => false));
+            console.log('Temporäre Datei Stats:', await fsPromises.stat(tempPath));
+            
+            const duration = await new Promise((resolve, reject) => {
+                console.log('Starte mp3-duration für:', tempPath);
+                
+                // Direkte Verwendung des Buffers statt der Datei
+                const buffer = fs.readFileSync(tempPath);
+                mp3Duration(buffer, (err, durationValue) => {
+                    if (err) {
+                        console.error('Fehler bei mp3-duration:', err);
+                        reject(err);
+                        return;
+                    }
+                    
+                    console.log('MP3 Dauer ermittelt:', durationValue, 'Sekunden');
+                    console.log('Dauer Typ:', typeof durationValue);
+                    
+                    if (durationValue === undefined || typeof durationValue !== 'number') {
+                        console.error('Dauer ist undefined oder kein number!');
+                        reject(new Error(`Ungültige Dauer: ${durationValue}`));
+                        return;
+                    }
+                    
+                    resolve(durationValue);
+                });
+            });
+            
+            console.log('Dauer nach Promise:', duration, 'Sekunden');
+            console.log('Dauer Typ nach Promise:', typeof duration);
+            
+            // Lösche die temporäre Datei
+            await fsPromises.unlink(tempPath);
+            
+            // Validiere die Dauer
+            if (typeof duration !== 'number' || isNaN(duration) || duration <= 0) {
+                throw new Error(`Ungültige Dauer: ${duration} (${typeof duration})`);
+            }
+
+            // Erstelle das Track-Objekt
+            const track = {
+                name: file.name,  // Kein Debug-Info mehr im Namen
+                url: URL.createObjectURL(file),
+                duration: duration  // Bereits eine Nummer von mp3-duration
+            };
+            
+            console.log('Track hinzugefügt:', {
+                name: track.name,
+                duration: track.duration,
+                durationType: typeof track.duration,
+                formattedDuration: formatTime(track.duration)
+            });
+            
+            playlist.push(track);
+            updatePlaylistUI();
+        } catch (error) {
+            console.error('Fehler beim Laden:', error);
+            const track = {
+                name: `${file.name} [Fehler: ${error.message}]`,
+                url: URL.createObjectURL(file),
+                duration: 0
+            };
+            playlist.push(track);
+            updatePlaylistUI();
+        }
     },
     
     play: () => {
@@ -675,10 +672,10 @@ contextBridge.exposeInMainWorld('mediaPlayerControls', {
         currentSound.seek(currentSound.duration() * percent);
     },
 
-    handleDrop: async (files) => {
+    handleDrop: (files) => {
         for (const file of files) {
             if (file.type.startsWith('audio/')) {
-                await addFileToPlaylist(file);
+                loadFile(file);
             }
         }
     },

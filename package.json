@@ -3,7 +3,15 @@
   "version": "1.4.0",
   "main": "main.js",
   "scripts": {
-    "start": "electron . --no-sandbox"
+    "start": "electron . --no-sandbox",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "test:unit": "jest tests/unit",
+    "test:integration": "jest tests/integration",
+    "sandbox:setup": "bash setup-sandbox.sh",
+    "sandbox:test": "bash run-sandbox-tests.sh",
+    "sandbox:run": "cd sandbox/etts-test && npm install && npm test"
   },
   "dependencies": {
     "@electron/remote": "^2.1.2",
