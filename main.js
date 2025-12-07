@@ -36,6 +36,9 @@ const AVATAR_VOICE_MAP = {
 // Globale Variable für den Stopp-Status
 let stopRequested = false;
 
+// Globale Variable für das Hauptfenster
+let mainWindow = null;
+
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 
@@ -60,7 +63,7 @@ function splitTextIntoChunks(text, maxLength) {
 
 function createWindow() {
     const iconPath = path.join(__dirname, 'assets');
-    let mainWindow = new BrowserWindow({
+    mainWindow = new BrowserWindow({
         width: 1324,
         height: 747,
         minWidth: 1324,
